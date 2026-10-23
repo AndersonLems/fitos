@@ -30,18 +30,19 @@ with session_scope() as s:
 fmap = {f.id: (f.short_name or f.name) for f in foods}
 
 with tab_est:
-    with st.form("add_estoque", clear_on_submit=True):
-        c1, c2, c3, c4 = st.columns([3, 1, 1.2, 1.4])
-        fid = c1.selectbox("Alimento", list(fmap), format_func=fmap.get, index=None, placeholder="Escolha")
-        qty = c2.text_input("Quantidade", "1")
-        unit = c3.selectbox("Unidade", list(UNIT_LABELS), format_func=UNIT_LABELS.get)
-        gpu = c4.number_input("g por unidade", 0.0, 5000.0, None, 1.0, help="Obrigatório para unidade/dúzia")
-        c1, c2 = st.columns([1, 3])
-        exp = c1.date_input("Validade (opcional)", None, format="DD/MM/YYYY")
-        notes = c2.text_input("Observações")
-        ui.note("Cadastre no estado em que está em casa: arroz e feijão crus, frango cru etc. O cardápio converte "
-                "porções cozidas para o peso cru antes de descontar.")
-        ok = st.form_submit_button("Adicionar à despensa", type="primary")
+    with st.expander("Adicionar item à despensa", icon=":material/add:"):
+        with st.form("add_estoque", clear_on_submit=True):
+            c1, c2, c3, c4 = st.columns([3, 1, 1.2, 1.4])
+            fid = c1.selectbox("Alimento", list(fmap), format_func=fmap.get, index=None, placeholder="Escolha")
+            qty = c2.text_input("Quantidade", "1")
+            unit = c3.selectbox("Unidade", list(UNIT_LABELS), format_func=UNIT_LABELS.get)
+            gpu = c4.number_input("g por unidade", 0.0, 5000.0, None, 1.0, help="Obrigatório para unidade/dúzia")
+            c1, c2 = st.columns([1, 3])
+            exp = c1.date_input("Validade (opcional)", None, format="DD/MM/YYYY")
+            notes = c2.text_input("Observações")
+            ui.note("Cadastre no estado em que está em casa: arroz e feijão crus, frango cru etc. O cardápio converte "
+                    "porções cozidas para o peso cru antes de descontar.")
+            ok = st.form_submit_button("Adicionar à despensa", type="primary")
     if ok:
         try:
             if fid is None:
@@ -60,16 +61,25 @@ with tab_est:
         st.warning("Vencendo em até 3 dias ou vencido: " + ", ".join(
             f"{i.food.short_name or i.food.name} ({i.expires_on:%d/%m})" for i in soon))
     if items:
+        rows = []
+        for item in items:
+            kind = "bad" if item.expires_on and item.expires_on < date.today() else "warn" if item in soon else ""
+            rows.append('<div class="fx-inventory-row"><div><strong>' + ui.esc(item.food.short_name or item.food.name)
+                        + '</strong><div class="fx-ex-d">' + ui.esc(item.notes or "") + '</div></div><span>'
+                        + ui.esc(fmt_qty(item.quantity, item.unit)) + '</span><span>'
+                        + ui.chip(ui.fmt_date(item.expires_on) if item.expires_on else "Sem validade", kind) + '</span></div>')
+        st.html('<div class="fx-card"><div class="fx-inventory-row fx-eyebrow"><span>Item</span><span>Quantidade</span><span>Validade</span></div>' + ''.join(rows) + '</div>')
         df = pd.DataFrame([{"id": i.id, "alimento": i.food.short_name or i.food.name,
                             "quantidade": float(i.quantity), "unidade": i.unit, "validade": i.expires_on,
                             "situação": ("vencido" if i.expires_on and i.expires_on < date.today() else
                                          "vence logo" if i in soon else "ok"),
                             "observações": i.notes or "", "remover": False} for i in items])
-        ed = st.data_editor(df, hide_index=True, width="stretch", key="estoque",
-                            disabled=["id", "alimento", "unidade", "situação"],
-                            column_config={"id": None,
-                                           "quantidade": st.column_config.NumberColumn(min_value=0, step=0.1),
-                                           "validade": st.column_config.DateColumn(format="DD/MM/YYYY")})
+        with st.expander("Editar quantidades, validade ou remover itens"):
+            ed = st.data_editor(df, hide_index=True, width="stretch", key="estoque",
+                                disabled=["id", "alimento", "unidade", "situação"],
+                                column_config={"id": None,
+                                               "quantidade": st.column_config.NumberColumn(min_value=0, step=0.1),
+                                               "validade": st.column_config.DateColumn(format="DD/MM/YYYY")})
         to_remove = ed[ed["remover"]]
         c1, c2 = st.columns([1, 3])
         confirm = True
@@ -166,7 +176,7 @@ with tab_coz:
     with c2:
         if st.button("Montar refeições de amanhã com Gemini", disabled=not (gs.is_configured() and stock)):
             try:
-                with st.spinner("Consultando o Gemini…"), session_scope() as s:
+                with ui.loading("Consultando o Gemini…"), session_scope() as s:
                     menu, miss, nts = ai_planner.ai_tomorrow_from_stock(s, s.get(Profile, p.id), e.target_kcal,
                                                                         e.protein_g)
                 st.session_state["coz_local"] = [(m.meal_type, m.preparation, [(i.food.id, i.grams) for i in m.items])
@@ -194,7 +204,7 @@ with tab_coz:
         go_ = st.form_submit_button("Sugerir receitas", disabled=not gs.is_configured())
     if go_:
         try:
-            with st.spinner("Consultando o Gemini…"), session_scope() as s:
+            with ui.loading("Consultando o Gemini…"), session_scope() as s:
                 recs, _ = ai_planner.ai_recipes(s, s.get(Profile, p.id), ingredients, use_stock, max_minutes=minutes,
                                                 target_kcal=e.target_kcal, target_protein=e.protein_g)
             st.session_state["receitas"] = [r.model_dump() for r in recs]

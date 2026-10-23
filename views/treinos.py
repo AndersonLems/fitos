@@ -41,7 +41,7 @@ def generate_controls(key: str) -> None:
         req = st.text_input("Pedido (opcional)", key=f"rq{key}", placeholder="Ex.: mais foco em costas, sem barra livre")
         if st.button("Gerar com Gemini", key=f"gg{key}", disabled=not gs.is_configured()):
             try:
-                with st.spinner("Gerando e validando a ficha…"), session_scope() as s:
+                with ui.loading("Gerando e validando a ficha…"), session_scope() as s:
                     plan, why = ai_workout_plan(s, s.get(Profile, p.id), req)
                 flash(f"Ficha v{plan.version} criada pelo Gemini. {why}", "info")
                 st.rerun()
@@ -97,8 +97,7 @@ with tab_hoje:
         st.success(f"Treino de hoje concluído ({len(done_today)} sessão registrada).")
 
     if today.day and not sess:
-        st.html(ui.bullet_list([f"{ex_name(x.exercise)} — {x.sets}×{x.reps_min}–{x.reps_max}, descanso {x.rest_seconds}s"
-                                for x in today.day.exercises]))
+        ui.exercise_rows(today.day.exercises)
         if st.button("Iniciar outra sessão" if done_today else "Iniciar treino", type="primary"):
             with session_scope() as s:
                 pl = ws.active_plan(s, p.id)

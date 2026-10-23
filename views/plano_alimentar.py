@@ -42,7 +42,7 @@ def generation_form(key: str) -> None:
     if ok:
         b = Decimal(str(round(budget, 2))) if budget else None
         try:
-            with st.spinner("Montando o cardápio…"), session_scope() as s:
+            with ui.loading("Montando o cardápio…"), session_scope() as s:
                 prof = s.get(Profile, p.id)
                 if mode == "Gemini":
                     plan = ai_planner.ai_meal_plan(s, prof, days, kcal, prot, people=people, economic=economic,
@@ -102,32 +102,33 @@ with tab_dia:
     st.html(ui.chip(f"{dm.kcal:.0f} kcal") + ui.chip(f"P {dm.protein:.0f} g") + ui.chip(f"C {dm.carbs:.0f} g")
             + ui.chip(f"G {dm.fat:.0f} g") + ui.chip(f"custo {fmt_brl(sm.day_cost[day])}"))
     for ms in sm.days[day]:
-        meal = ms.meal
-        st.html(f'<div class="fx-meal"><b>{ui.esc(meal.meal_type)}</b> <span>· {ui.esc(meal.title or "")} · '
-                f'{ms.macros.kcal:.0f} kcal · P {ms.macros.protein:.0f} g · {fmt_brl(ms.cost)}'
-                f'{" (parcial)" if ms.unpriced else ""}</span></div>')
-        rows = []
-        for it in meal.items:
-            m = ns.food_macros(it.food, it.grams)
-            ic = ns.item_cost(it.food, it.grams, prices, plan.people)
-            rows.append({"alimento": it.food.short_name or it.food.name, "quantidade": f"{it.grams:g} g",
-                         "estado": it.food.state, "kcal": round(m.kcal), "proteína": round(m.protein, 1),
-                         "carbo": round(m.carbs, 1), "gordura": round(m.fat, 1),
-                         "comprar (cru)": f"{ic.purchase_grams:.0f} g" + (" ×pessoas" if plan.people > 1 else ""),
-                         "custo": fmt_brl(ic.cost) if ic.cost is not None else "sem preço"})
-        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
-        c1, c2 = st.columns([4, 1])
-        if meal.preparation:
-            c1.caption("Preparo: " + meal.preparation)
-        if meal.id in eaten:
-            if c2.button("Desmarcar", key=f"un{meal.id}"):
+        with st.container(border=True):
+            meal = ms.meal
+            st.html(f'<div class="fx-meal"><b>{ui.esc(meal.meal_type)}</b> <span>· {ui.esc(meal.title or "")} · '
+                    f'{ms.macros.kcal:.0f} kcal · P {ms.macros.protein:.0f} g · {fmt_brl(ms.cost)}'
+                    f'{" (parcial)" if ms.unpriced else ""}</span></div>')
+            rows = []
+            for it in meal.items:
+                m = ns.food_macros(it.food, it.grams)
+                ic = ns.item_cost(it.food, it.grams, prices, plan.people)
+                rows.append({"alimento": it.food.short_name or it.food.name, "quantidade": f"{it.grams:g} g",
+                             "estado": it.food.state, "kcal": round(m.kcal), "proteína": round(m.protein, 1),
+                             "carbo": round(m.carbs, 1), "gordura": round(m.fat, 1),
+                             "comprar (cru)": f"{ic.purchase_grams:.0f} g" + (" ×pessoas" if plan.people > 1 else ""),
+                             "custo": fmt_brl(ic.cost) if ic.cost is not None else "sem preço"})
+            st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+            c1, c2 = st.columns([4, 1])
+            if meal.preparation:
+                c1.caption("Preparo: " + meal.preparation)
+            if meal.id in eaten:
+                if c2.button("Desmarcar", key=f"un{meal.id}"):
+                    with session_scope() as s:
+                        ns.unlog_meal(s, p.id, meal.id)
+                    st.rerun()
+            elif c2.button("Comi hoje", key=f"eat{meal.id}"):
                 with session_scope() as s:
-                    ns.unlog_meal(s, p.id, meal.id)
+                    ns.log_meal(s, p.id, s.get(Meal, meal.id))
                 st.rerun()
-        elif c2.button("Comi hoje", key=f"eat{meal.id}"):
-            with session_scope() as s:
-                ns.log_meal(s, p.id, s.get(Meal, meal.id))
-            st.rerun()
     ui.note("Valores nutricionais: TACO 4ª ed. (NEPA/UNICAMP). Conversão cru/cozido por índice de cocção de referência "
             "e perdas por fator de correção — estimativas editáveis. Planejamento pessoal, não prescrição clínica.")
 
@@ -156,7 +157,7 @@ with tab_acoes:
     if st.button("Gerar versão econômica", type="primary"):
         b = Decimal(str(round(budget, 2))) if budget else None
         try:
-            with st.spinner("Recalculando…"), session_scope() as s:
+            with ui.loading("Recalculando…"), session_scope() as s:
                 prof = s.get(Profile, p.id)
                 cur = ns.load_plan(s, plan.id)
                 if via == "Gemini":

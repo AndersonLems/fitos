@@ -92,18 +92,21 @@ show_flash()
 remember_profile_cookie()
 
 pages = {
-    "": [st.Page("views/dashboard.py", title="Painel", default=True)],
-    "Treino": [st.Page("views/treinos.py", title="Meus treinos", url_path="treinos"),
-               st.Page("views/biblioteca.py", title="Biblioteca de exercícios", url_path="biblioteca")],
-    "Alimentação": [st.Page("views/plano_alimentar.py", title="Meu plano alimentar", url_path="plano-alimentar"),
-                    st.Page("views/mercado.py", title="Mercado inteligente", url_path="mercado"),
-                    st.Page("views/despensa.py", title="Minha despensa", url_path="despensa")],
-    "Você": [st.Page("views/evolucao.py", title="Minha evolução", url_path="evolucao"),
-             st.Page("views/personal_ia.py", title="Meu personal IA", url_path="personal-ia"),
-             st.Page("views/perfil.py", title="Meu perfil", url_path="perfil"),
-             st.Page("views/configuracoes.py", title="Configurações", url_path="configuracoes")],
+    "": [st.Page("views/dashboard.py", title="Hoje", icon=":material/dashboard:", default=True)],
+    "Treino": [st.Page("views/treinos.py", title="Meus treinos", icon=":material/fitness_center:", url_path="treinos"),
+               st.Page("views/biblioteca.py", title="Biblioteca", icon=":material/exercise:", url_path="biblioteca")],
+    "Nutrição": [st.Page("views/plano_alimentar.py", title="Plano alimentar", icon=":material/restaurant:", url_path="plano-alimentar"),
+                    st.Page("views/mercado.py", title="Mercado inteligente", icon=":material/shopping_cart:", url_path="mercado"),
+                    st.Page("views/despensa.py", title="Minha despensa", icon=":material/inventory_2:", url_path="despensa")],
+    "Acompanhamento": [st.Page("views/evolucao.py", title="Minha evolução", icon=":material/show_chart:", url_path="evolucao"),
+             st.Page("views/personal_ia.py", title="Personal IA", icon=":material/auto_awesome:", url_path="personal-ia")],
+
+    "Conta": [st.Page("views/perfil.py", title="Meu perfil", icon=":material/person:", url_path="perfil"),
+             st.Page("views/configuracoes.py", title="Configurações", icon=":material/settings:", url_path="configuracoes")],
 }
-st.navigation(pages, position="sidebar").run()
+page = st.navigation(pages, position="sidebar")
+ui.app_chrome(page.title, dict(profiles)[pid], pid, page.url_path)
+page.run()
 
 with st.sidebar:
     st.html('<p class="fx-note" style="margin-top:18px">Estimativas para planejamento pessoal. O FitOS e o Gemini '

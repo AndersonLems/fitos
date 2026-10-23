@@ -2,81 +2,24 @@
 from __future__ import annotations
 
 import html
+from pathlib import Path
+from contextlib import contextmanager
 from typing import Iterable
 
 import plotly.graph_objects as go
 import plotly.io as pio
 import streamlit as st
 
-# Paleta categórica validada (CVD/contraste) para a superfície escura #181b21
-SERIES = ["#2fae64", "#3a8fd8", "#b9801c", "#9a7ce0", "#e0584f"]
-INK, INK2, MUTED, GRID, AXIS, SURFACE = "#eceae5", "#c3c7cf", "#9aa1ad", "#2a2e36", "#383d47", "#181b21"
-ACCENT = "#3fbf74"
-GOOD, WARN, BAD = "#3fbf74", "#d9a75f", "#e86370"
+# Paleta categórica validada (CVD/contraste) para a superfície escura #14181E
+SERIES = ["#B5F24A", "#6eaddb", "#e4b568", "#9a7ce0", "#e0584f"]
+INK, INK2, MUTED, GRID, AXIS, SURFACE = "#F3F5F7", "#A4ADB9", "#737D8A", "#2A3039", "#383d47", "#14181E"
+ACCENT = "#B5F24A"
+GOOD, WARN, BAD = "#B5F24A", "#d9a75f", "#e86370"
 
-CSS = """
-<style>
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@700;800&display=swap");
-:root { --page:#0f1115; --surface:#181b21; --ink:#eceae5; --ink-2:#c3c7cf; --muted:#9aa1ad; --grid:#2a2e36;
-        --axis:#383d47; --border:#343943; --chip:#20242c; --acento:#3fbf74; --bad:#e86370; --warn:#d9a75f; }
-body { font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; }
-h1, h2, h3, .fx-val { font-family: "Playfair Display", Georgia, serif !important; letter-spacing: -.01em; }
-h1 { font-weight: 800 !important; }
-.block-container { padding-top: 2.2rem; max-width: 1320px; }
-[data-testid="stSidebar"] { border-right: 1px solid var(--border); }
-[data-testid="stSidebarNavSeparator"] { border-color: var(--border); }
-.fx-head { border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 18px; }
-.fx-head h1 { font-size: 34px; margin: 0 0 4px; padding: 0; line-height: 1.15; }
-.fx-head p { color: var(--ink-2); margin: 0; max-width: 85ch; font-size: 14.5px; }
-.fx-head .fx-kicker { text-transform: uppercase; letter-spacing: .08em; font-size: 11.5px; color: var(--acento); font-weight: 600; margin-bottom: 4px; }
-.fx-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; margin: 4px 0 18px; }
-.fx-tile { background: var(--surface); border: 1px solid var(--border); border-top: 3px solid var(--ink); padding: 12px 14px 10px; min-width: 0; }
-.fx-tile.acento { border-top-color: var(--acento); }
-.fx-tile .fx-rot { font-size: 12.5px; color: var(--ink-2); }
-.fx-tile .fx-val { font-size: 27px; font-weight: 800; line-height: 1.2; margin-top: 2px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.fx-tile .fx-det { font-size: 12px; color: var(--muted); margin-top: 2px; }
-.fx-tile .fx-det b { color: var(--ink-2); font-weight: 600; }
-.fx-prov { display: inline-block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--warn);
-           border: 1px solid rgba(217,167,95,.45); padding: 0 5px; margin-left: 6px; vertical-align: 2px; }
-.fx-card { background: var(--surface); border: 1px solid var(--border); border-top: 3px solid var(--ink); padding: 16px 18px; margin-bottom: 14px; }
-.fx-card h3 { font-size: 17px; margin: 0 0 6px; padding: 0; }
-.fx-card p { color: var(--ink-2); margin: 0 0 6px; }
-.fx-note { font-size: 12.5px; color: var(--muted); margin: 6px 0 14px; max-width: 95ch; }
-.fx-note a { color: var(--ink-2); }
-.fx-list { margin: 0; padding-left: 18px; color: var(--ink-2); }
-.fx-list li { margin-bottom: 5px; }
-.fx-chip { display: inline-block; background: var(--chip); padding: 1px 8px; font-size: 11.5px; margin: 0 4px 4px 0; color: var(--ink-2); }
-.fx-chip.ok { color: var(--acento); }
-.fx-chip.warn { color: var(--warn); }
-.fx-chip.bad { color: var(--bad); }
-.fx-meal { border-left: 3px solid var(--acento); padding: 2px 0 2px 12px; margin: 8px 0 4px; }
-.fx-meal b { font-size: 15px; }
-.fx-meal span { color: var(--muted); font-size: 12.5px; }
-.fx-day { font-family: "Playfair Display", Georgia, serif; font-size: 20px; font-weight: 800; margin: 12px 0 2px; }
-.fx-ex { display:flex; gap:14px; align-items:flex-start; border-top: 1px solid var(--grid); padding: 10px 0; }
-.fx-ex img { width: 96px; height: 96px; object-fit: cover; background: #fff; flex: none; }
-.fx-ex .fx-ex-t { font-weight: 600; }
-.fx-ex .fx-ex-d { color: var(--muted); font-size: 12.5px; }
-.fx-media-off { width: 96px; height: 96px; display:flex; align-items:center; justify-content:center; text-align:center;
-                font-size: 11px; color: var(--muted); border: 1px dashed var(--border); flex: none; }
-div[data-testid="stMetric"] { background: var(--surface); border: 1px solid var(--border); border-top: 3px solid var(--ink); padding: 10px 14px; }
-div[data-testid="stMetricValue"] { font-family: "Playfair Display", Georgia, serif; font-weight: 800; }
-.stTabs [data-baseweb="tab-list"] { gap: 4px; border-bottom: 1px solid var(--border); }
-.stTabs [data-baseweb="tab"] { padding: 6px 12px; }
-[data-testid="stExpander"] details { border-radius: 0; }
-button[kind="primary"] { font-weight: 600; }
-@media (max-width: 640px) {
-  .block-container { padding: 3.8rem 1rem 3rem; }
-  .fx-head h1 { font-size: 26px; }
-  .fx-tiles { grid-template-columns: 1fr 1fr; gap: 8px; }
-  .fx-tile .fx-val { font-size: 21px; }
-}
-</style>
-"""
 
 
 def inject_css() -> None:
-    st.html(CSS)
+    st.html("<style>" + (Path(__file__).resolve().parents[1] / "assets/theme.css").read_text() + "</style>")
 
 
 def esc(v) -> str:
@@ -120,7 +63,7 @@ def bullet_list(items: list[str]) -> str:
 
 def media_html(url: str | None, alt: str) -> str:
     if not url:
-        return '<div class="fx-media-off">sem mídia</div>'
+        return '<div class="fx-media-off" aria-label="Sem mídia">◇</div>'
     return (f'<img src="{esc(url)}" alt="mídia indisponível — {esc(alt)}" loading="lazy" '
             "onerror=\"this.outerHTML='<div class=&quot;fx-media-off&quot;>mídia indisponível</div>'\">")
 
@@ -132,7 +75,7 @@ def _register_template() -> None:
         return
     t = go.layout.Template()
     t.layout = go.Layout(
-        font=dict(family="Inter, system-ui, sans-serif", color=INK2, size=12.5),
+        font=dict(family="Geist, system-ui, sans-serif", color=INK2, size=12.5),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", colorway=SERIES,
         xaxis=dict(gridcolor=GRID, linecolor=AXIS, zeroline=False, tickcolor=AXIS, showgrid=False),
         yaxis=dict(gridcolor=GRID, linecolor=AXIS, zeroline=False, tickcolor=AXIS),
@@ -161,7 +104,7 @@ def date_axis(fig: go.Figure, fmt: str = "%d/%m") -> go.Figure:
 
 
 def plot(fig: go.Figure) -> None:
-    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False, "locale": "pt-BR"})
+    st.plotly_chart(fig, width="stretch", theme=None, config={"displayModeBar": False, "locale": "pt-BR"})
 
 
 def fmt_num(v, digits: int = 0) -> str:
@@ -173,3 +116,70 @@ def fmt_num(v, digits: int = 0) -> str:
 
 def fmt_date(d) -> str:
     return d.strftime("%d/%m/%Y") if d else "—"
+
+
+@contextmanager
+def loading(label: str, rows: int = 3):
+    """Actual operation lifetime, with cleanup on success, failure or rerun."""
+    placeholder = st.empty()
+    placeholder.html('<div class="fx-loading" role="status" aria-live="polite" aria-busy="true">'
+                     '<div class="fx-loading-line"></div><p>' + esc(label) + '</p>'
+                     + '<div class="fx-skeleton" aria-hidden="true"></div>' * rows + '</div>')
+    try:
+        yield
+    finally:
+        placeholder.empty()
+
+
+def progress_html(value: float, maximum: float, color: str = ACCENT) -> str:
+    pct = max(0, min(100, float(value) / float(maximum) * 100)) if maximum else 0
+    return (f'<div class="fx-track" role="progressbar" aria-label="Progresso" aria-valuenow="{pct:.0f}" '
+            f'aria-valuemin="0" aria-valuemax="100"><span style="width:{pct}%;background:{color}"></span></div>')
+
+
+def exercise_rows(exercises, completed: dict | None = None) -> None:
+    completed = completed or {}
+    rows = []
+    for i, pe in enumerate(exercises, 1):
+        name = pe.exercise.name_pt or pe.exercise.name_original
+        count = completed.get(pe.id, 0)
+        marks = ''.join(f'<i class="{"done" if n < count else ""}"></i>' for n in range(pe.sets))
+        thumb = '<div class="fx-media-off" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m6 6 12 12M3 7l4-4M17 21l4-4M2 10l8-8M14 22l8-8"/></svg></div>'
+        rows.append(f'<div class="fx-ex"><span class="fx-ex-number">{i}</span>'
+                    f'{thumb}<div class="fx-ex-body">'
+                    f'<div class="fx-ex-t">{esc(name)}</div><div class="fx-ex-d">'
+                    f'{pe.sets} × {pe.reps_min}–{pe.reps_max} · descanso {pe.rest_seconds}s</div></div>'
+                    f'<div class="fx-sets" aria-label="{count} de {pe.sets} séries">{marks}</div>'
+                    f'<span class="fx-ex-d">{"✓" if count >= pe.sets else "›"}</span></div>')
+    st.html(''.join(rows))
+
+
+def week_strip(plan, finished_dates) -> None:
+    from datetime import date, timedelta
+    today = date.today()
+    monday = today - timedelta(days=today.weekday())
+    scheduled = {d.weekday for d in plan.days} if plan else set()
+    out = []
+    for n, name in enumerate(['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']):
+        day = monday + timedelta(days=n)
+        cls = 'done' if day in finished_dates else 'today' if day == today else 'planned' if n in scheduled else ''
+        label = 'Concluído' if cls == 'done' else 'Hoje' if cls == 'today' else 'Programado' if cls else 'Descanso'
+        out.append(f'<div title="{day:%d/%m}: {label}">{name}<b class="{cls}">{day.day}</b></div>')
+    st.html('<div class="fx-week" aria-label="Semana de treinos">' + ''.join(out) + '</div>')
+
+
+def app_chrome(title: str, name: str, profile_id: int, path: str) -> None:
+    from datetime import date
+    st.html(f'<div class="fx-topbar"><span>FitOS &nbsp; / &nbsp; <strong>{esc(title)}</strong></span>'
+            f'<span class="fx-top-date">{date.today():%d/%m/%Y}</span>'
+            f'<a href="evolucao?perfil={profile_id}" target="_self">＋ Registrar peso</a><strong>{esc(name)}</strong></div>')
+    links = [('','Hoje'),('treinos','Treinos'),('plano-alimentar','Alimentar'),('despensa','Despensa'),('personal-ia','Personal IA')]
+    icons = ['<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>',
+             '<path d="m6 6 12 12M3 7l4-4M17 21l4-4M2 10l8-8M14 22l8-8"/>',
+             '<path d="M5 3v7m4-7v7m-6 0h8M7 10v11M18 3v18m0-18c-5 4-5 10 0 10"/>',
+             '<rect x="3" y="7" width="18" height="14"/><path d="M2 3h20v4H2zm7 9h6"/>',
+             '<path d="m12 3 3 6 6 3-6 3-3 6-3-6-6-3 6-3z"/>']
+    st.html('<nav class="fx-mobile-nav" aria-label="Navegação principal">' + ''.join(
+        f'<a href="/{route}?perfil={profile_id}" target="_self"'+(' aria-current="page"' if route == path else '')
+        + f'><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">{icon}</svg>{label}</a>'
+        for (route,label),icon in zip(links,icons)) + '</nav>')

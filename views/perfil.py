@@ -14,6 +14,11 @@ p = require_profile()
 ui.page_header("Meu perfil", "Só idade, peso e altura são obrigatórios. Cada dado opcional deixa as estimativas "
                "e as sugestões mais adequadas; nada é presumido sem aviso.", kicker=p.name)
 
+initials = "".join(part[0] for part in p.name.split()[:2])
+st.html(f'<div class="fx-profile"><span>{ui.esc(initials)}</span><div><strong>{ui.esc(p.name)}</strong>'
+        f'<p>{ui.esc(ps.GOALS.get(p.goal, "Objetivo não informado"))} · '
+        f'{ui.esc(ps.EXPERIENCE.get(p.experience, "Experiência não informada"))}</p></div></div>')
+
 e = ps.estimate_energy(p)
 missing = ps.missing_for_personalization(p)
 ui.tiles([

@@ -82,7 +82,7 @@ if prompt:
     with st.chat_message("user"):
         st.markdown(prompt)
     try:
-        with st.spinner("Pensando…"), session_scope() as s:
+        with ui.loading("Pensando…"), session_scope() as s:
             conv = cs.get_or_create_conversation(s, p.id, st.session_state.get("conv_id"))
             if not conv.messages:
                 conv.title = prompt[:60]

@@ -33,9 +33,15 @@ else:
         sel = ids[0]
     left, right = st.columns([2, 3])
     with left:
-        sel = st.radio("Exercícios", ids, index=ids.index(sel), label_visibility="collapsed",
-                       format_func=lambda i: next(es.display_name(e) for e in results if e.id == i))
-        st.session_state["ex_sel"] = sel
+        grid = st.columns(2)
+        for i, exercise in enumerate(results):
+            with grid[i % 2], st.container(border=True):
+                st.html(ui.media_html(exercise.gif_url, es.display_name(exercise)))
+                if st.button(es.display_name(exercise), key=f"library_{exercise.id}", width="stretch",
+                             type="primary" if sel == exercise.id else "secondary"):
+                    st.session_state["ex_sel"] = exercise.id
+                    st.rerun()
+                st.caption(es.BODY_PARTS_PT.get(exercise.body_part, exercise.body_part) or "Exercício")
     ex = next(e for e in results if e.id == sel)
     with right:
         st.html(f'<div class="fx-day">{ui.esc(es.display_name(ex))}</div>'
@@ -71,10 +77,10 @@ with st.expander("Atualizar catálogo a partir das fontes"):
              "acessível — integração não implementada.")
     c1, c2 = st.columns(2)
     if c1.button("Sincronizar ExerciseDB"):
-        with st.spinner("Baixando…"), session_scope() as s:
+        with ui.loading("Baixando…"), session_scope() as s:
             _, msg = es.sync_exercisedb(s)
         st.info(msg)
     if c2.button("Importar do wger"):
-        with st.spinner("Baixando…"), session_scope() as s:
+        with ui.loading("Baixando…"), session_scope() as s:
             _, msg = es.sync_wger(s)
         st.info(msg)

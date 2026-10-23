@@ -158,7 +158,7 @@ if st.button("Gerar nova análise", disabled=not gs.is_configured() or w.empty):
              "cargas": (hist[hist["concluida"]].groupby("exercicio")["carga"].agg(["first", "last"]).reset_index()
                         .head(10).values.tolist() if not hist.empty else [])}
     try:
-        with st.spinner("Consultando o Gemini…"), session_scope() as s:
+        with ui.loading("Consultando o Gemini…"), session_scope() as s:
             ai_trend_analysis(s, s.get(Profile, p.id), facts)
         st.rerun()
     except gs.GeminiUnavailable as exc:

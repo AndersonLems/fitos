@@ -20,16 +20,16 @@ magicEnabled = false
 
 [theme]
 base = "dark"
-primaryColor = "#3fbf74"
-backgroundColor = "#0f1115"
-secondaryBackgroundColor = "#181b21"
-textColor = "#eceae5"
-borderColor = "#343943"
+primaryColor = "#B5F24A"
+backgroundColor = "#0B0D10"
+secondaryBackgroundColor = "#14181E"
+textColor = "#F3F5F7"
+borderColor = "#2A3039"
 showWidgetBorder = true
-baseRadius = "small"
-font = "Inter, system-ui, -apple-system, 'Segoe UI', sans-serif"
-headingFont = "'Playfair Display', Georgia, serif"
+baseRadius = "0.625rem"
+font = "Geist, system-ui, -apple-system, 'Segoe UI', sans-serif"
+headingFont = "'Space Grotesk', sans-serif"
 codeFont = "'JetBrains Mono', ui-monospace, monospace"
 
 [theme.sidebar]
-backgroundColor = "#13161b"
+backgroundColor = "#0B0D10"
