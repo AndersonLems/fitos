@@ -1,6 +1,7 @@
 """Configuração central lida do ambiente (.env). Segredos nunca vão para o banco."""
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 from logging.handlers import RotatingFileHandler
@@ -32,6 +33,9 @@ def _db_url() -> str:
 DATABASE_URL = _db_url()
 GEMINI_MODEL_DEFAULT = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
 ACCESS_CODE = os.getenv("FITOS_ACCESS_CODE", "").strip()
+# Assina o cookie de sessão. Sem FITOS_SECRET, deriva do código da instalação (troque um ou outro para
+# encerrar todas as sessões abertas).
+SESSION_SECRET = os.getenv("FITOS_SECRET", "").strip() or hashlib.sha256(f"fitos-sessao:{ACCESS_CODE}".encode()).hexdigest()
 
 
 def gemini_api_key() -> str | None:

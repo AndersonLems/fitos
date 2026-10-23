@@ -2,44 +2,15 @@
 from __future__ import annotations
 
 import streamlit as st
-import streamlit.components.v1 as components
 
 from database.connection import session_scope
 from database.models import Profile
 
-KEY = "profile_id"
+KEY = "profile_id"  # gravado por components.auth após a entrada
 
 
 def current_profile_id() -> int | None:
-    pid = st.session_state.get(KEY)
-    if pid is None:
-        qp = st.query_params.get("perfil")
-        if not (qp and qp.isdigit()):
-            try:
-                qp = st.context.cookies.get("fitos_perfil")
-            except Exception:  # noqa: BLE001
-                qp = None
-        if qp and qp.isdigit():
-            pid = int(qp)
-            st.session_state[KEY] = pid
-    return pid
-
-
-def set_profile(pid: int | None) -> None:
-    st.session_state[KEY] = pid
-    if pid is None:
-        st.query_params.pop("perfil", None)
-    else:
-        st.query_params["perfil"] = str(pid)
-        st.session_state["_cookie_perfil"] = pid
-
-
-def remember_profile_cookie() -> None:
-    """Grava no navegador o último perfil escolhido (cada aparelho lembra o seu)."""
-    pid = st.session_state.pop("_cookie_perfil", None)
-    if pid is not None:
-        components.html(f"<script>parent.document.cookie='fitos_perfil={int(pid)};path=/;max-age=31536000;"
-                        "SameSite=Lax';</script>", height=0)
+    return st.session_state.get(KEY)
 
 
 def load_profile() -> Profile | None:

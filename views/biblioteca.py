@@ -1,11 +1,14 @@
 import streamlit as st
 
 from components import ui
+from components.exercise_view import exercise_detail
+from components.state import require_profile
 from database.connection import session_scope
 from database.models import Exercise
 from services import exercise_service as es
-from services.catalog_data import SLOT_LABELS
+from services import workout_service as ws
 
+p = require_profile()
 ui.page_header("Biblioteca de exercícios", "Catálogo local com demonstrações do ExerciseDB e do wger. As mídias são "
                "exibidas a partir das fontes originais, com atribuição; não há cópia local.")
 
@@ -45,32 +48,10 @@ else:
                         st.session_state["ex_sel"] = exercise.id
                         st.rerun()
     ex = next(e for e in results if e.id == sel)
+    with session_scope() as s:
+        last = ws.last_sets(s, p.id, ex.id)
     with right:
-        st.html(f'<div class="fx-day">{ui.esc(es.display_name(ex))}</div>'
-                + (f'<p class="fx-note">{ui.esc(ex.name_original)}</p>' if ex.name_pt else ""))
-        chips = [es.BODY_PARTS_PT.get(ex.body_part, ex.body_part), ex.primary_muscle,
-                 es.EQUIPMENT_PT.get(ex.equipment, ex.equipment), ex.difficulty, SLOT_LABELS.get(ex.slot)]
-        st.html("".join(ui.chip(c) for c in chips if c))
-        if ex.video_url:
-            st.video(ex.video_url)
-            ui.note("Vídeos do wger podem estar em HEVC (.MOV), que alguns navegadores não reproduzem.")
-        if ex.gif_url:
-            st.html(ui.media_html(ex.gif_url, f"Demonstração de {es.display_name(ex)}", "fx-thumb fx-demo"))
-        if not ex.gif_url and not ex.video_url:
-            st.warning("Sem mídia de demonstração para este exercício.")
-        if ex.secondary_muscles:
-            st.caption("Músculos secundários: " + ", ".join(ex.secondary_muscles))
-        if ex.instructions:
-            st.markdown("**Execução**")
-            steps = [x for x in ex.instructions.split("\n") if x.strip()]
-            st.markdown("\n".join(f"{i}. {x.strip()}" for i, x in enumerate(steps, 1)))
-            if not ex.name_pt or ex.source == "exercisedb":
-                ui.note("Instruções no idioma original da fonte.")
-        if ex.common_errors:
-            st.markdown("**Erros comuns**")
-            st.markdown(ex.common_errors)
-            ui.note("Orientação geral do FitOS por padrão de movimento.")
-        ui.note(f"Fonte: {ui.esc(ex.attribution or ex.media_source or ex.source)} · Licença: {ui.esc(ex.license or '—')}")
+        exercise_detail(ex, last=last)
 
 with st.expander("Atualizar catálogo a partir das fontes"):
     st.write("ExerciseDB: ~1.500 exercícios com GIF (sem chave, com limite de requisições; leva ~1–2 min). "

@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from components import ui
+from components.exercise_view import exercise_list
 from components.state import require_profile
 from database.connection import session_scope
 from services import gemini_service as gs
@@ -87,7 +88,7 @@ with left:
                             ws.start_session(s, p.id, pl, current.day)
                     st.switch_page("views/treinos.py")
             st.page_link("views/treinos.py", label="Ver resumo" if done_today else "Ver ficha completa", icon=":material/arrow_forward:")
-            ui.exercise_rows(day.exercises, completed)
+            exercise_list(day.exercises, "hoje", completed=completed, profile_id=p.id)
         else:
             st.caption("Mantenha a alimentação e a hidratação em dia." if plan else "Crie sua ficha de treino a partir do seu perfil.")
             st.page_link("views/treinos.py", label="Ver ficha" if plan else "Criar ficha de treino", icon=":material/fitness_center:")

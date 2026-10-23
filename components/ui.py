@@ -178,26 +178,6 @@ def svg_image(svg: str) -> str:
     return f'<img src="data:image/svg+xml;base64,{data}" alt="" aria-hidden="true" class="fx-icon">'
 
 
-def exercise_rows(exercises, completed: dict | None = None) -> None:
-    completed = completed or {}
-    rows = []
-    for i, pe in enumerate(exercises, 1):
-        name = pe.exercise.name_pt or pe.exercise.name_original
-        count = completed.get(pe.id, 0)
-        marks = ''.join(f'<i class="{"done" if n < count else ""}"></i>' for n in range(pe.sets))
-        icon = svg_image('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" '
-                         'fill="none" stroke="#A4ADB9" stroke-width="1.6">'
-                         '<path d="m6 6 12 12M3 7l4-4M17 21l4-4M2 10l8-8M14 22l8-8"/></svg>')
-        thumb = f'<div class="fx-media-off" aria-hidden="true">{icon}</div>'
-        rows.append(f'<div class="fx-ex"><span class="fx-ex-number">{i}</span>'
-                    f'{thumb}<div class="fx-ex-body">'
-                    f'<div class="fx-ex-t">{esc(name)}</div><div class="fx-ex-d">'
-                    f'{pe.sets} × {pe.reps_min}–{pe.reps_max} · descanso {pe.rest_seconds}s</div></div>'
-                    f'<div class="fx-sets" aria-label="{count} de {pe.sets} séries">{marks}</div>'
-                    f'<span class="fx-ex-d">{"✓" if count >= pe.sets else "›"}</span></div>')
-    st.html(''.join(rows))
-
-
 def week_strip(plan, finished_dates) -> None:
     st.html(week_strip_html(plan, finished_dates))
 
@@ -216,11 +196,11 @@ def week_strip_html(plan, finished_dates) -> str:
     return '<div class="fx-week" aria-label="Semana de treinos">' + ''.join(out) + '</div>'
 
 
-def app_chrome(title: str, name: str, profile_id: int, path: str) -> None:
+def app_chrome(title: str, name: str, path: str) -> None:
     from datetime import date
     st.html(f'<div class="fx-topbar"><span>FitOS &nbsp; / &nbsp; <strong>{esc(title)}</strong></span>'
             f'<span class="fx-top-date">{date.today():%d/%m/%Y}</span>'
-            f'<a href="evolucao?perfil={profile_id}" target="_self">＋ Registrar peso</a><strong>{esc(name)}</strong></div>')
+            f'<a href="evolucao" target="_self">＋ Registrar peso</a><strong>{esc(name)}</strong></div>')
     links = [('','Hoje'),('treinos','Treinos'),('plano-alimentar','Alimentar'),('despensa','Despensa'),('personal-ia','Personal IA')]
     icons = ['<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>',
              '<path d="m6 6 12 12M3 7l4-4M17 21l4-4M2 10l8-8M14 22l8-8"/>',
@@ -228,6 +208,6 @@ def app_chrome(title: str, name: str, profile_id: int, path: str) -> None:
              '<rect x="3" y="7" width="18" height="14"/><path d="M2 3h20v4H2zm7 9h6"/>',
              '<path d="m12 3 3 6 6 3-6 3-3 6-3-6-6-3 6-3z"/>']
     st.html('<nav class="fx-mobile-nav" aria-label="Navegação principal">' + ''.join(
-        f'<a href="/{route}?perfil={profile_id}" target="_self"'+(' aria-current="page"' if route == path else '')
+        f'<a href="/{route}" target="_self"'+(' aria-current="page"' if route == path else '')
         + '>' + svg_image(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#A4ADB9" stroke-width="1.6">{icon}</svg>') + f'{label}</a>'
         for (route,label),icon in zip(links,icons)) + '</nav>')

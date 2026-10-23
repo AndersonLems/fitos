@@ -76,6 +76,18 @@ CORE_EXERCISES: list[tuple[str, str, str, str]] = [
     ("stationary bike walk", "Bicicleta ergométrica", "cardio", "iniciante"),
 ]
 
+# O catálogo tem nomes repetidos; em alguns, a primeira entrada aponta para um GIF removido (404) no
+# ExerciseDB. Nome do exercício curado → source_id da entrada duplicada cuja mídia funciona (conferido em
+# 23/10/2026).
+CORE_MEDIA_FROM = {
+    "assisted pull-up": "kiJ4Z2K",
+    "cable seated row": "fUBheHs",
+    "inverted row": "bZGHsAZ",
+    "barbell romanian deadlift": "wQ2c4XD",
+    "barbell lying triceps extension": "iZop9xO",
+    "cable kneeling crunch": "WW95auq",
+}
+
 SLOT_LABELS = {
     "chest_press": "Empurrar horizontal", "chest_incline": "Empurrar inclinado", "chest_fly": "Adução de ombro",
     "vertical_pull": "Puxar vertical", "row": "Puxar horizontal", "squat": "Agachar", "leg_press": "Leg press",

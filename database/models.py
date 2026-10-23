@@ -54,6 +54,8 @@ class Profile(TimestampMixin, Base):
     equipment: Mapped[list | None] = mapped_column(JSON)
     monthly_food_budget: Mapped[Decimal | None] = mapped_column(Money)
     people_count: Mapped[int] = mapped_column(Integer, default=1)
+    # código de acesso do perfil (PBKDF2 com sal); None = perfil antigo, entra com o código da instalação
+    access_hash: Mapped[str | None] = mapped_column(String(200))
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
 
     measurements: Mapped[list[Measurement]] = relationship(back_populates="profile", cascade="all, delete-orphan")
