@@ -57,3 +57,14 @@ A reprodução utiliza os componentes nativos interativos do Streamlit para pres
 Gemini e APIs externas não receberam chamadas nos testes de revisão; os caminhos existentes foram preservados, com estados de indisponibilidade verificados. As capturas documentam aproximação visual, não uma aprovação automática de igualdade pixel a pixel.
 
 Resultado em 23/10/2026: **42 testes pytest passaram**; **20 combinações de página/viewport passaram** no Chrome, sem exceções ou overflow horizontal. Evidência: [browser-results.json](browser-results.json). Os testes de negócio usam seus próprios bancos temporários; a revisão visual também usa banco descartável.
+
+## Atualização do serviço já em execução
+
+Depois de atualizar os arquivos, reinicie o processo Streamlit. Recarregar somente a aba pode executar o `app.py` novo junto com módulos Python antigos que permanecem importados no processo. Na instalação local gerenciada por systemd:
+
+```sh
+systemctl --user restart fitos.service
+systemctl --user is-active fitos.service
+```
+
+Diagnóstico confirmado em 23/10/2026: `AttributeError: module 'components.ui' has no attribute 'app_chrome'` no `logs/streamlit.log`, em um processo iniciado antes do redesign. O reinício carrega os módulos e o tema atualizados; não requer modificar o banco. Para instalações sem esse serviço, encerre e inicie novamente `streamlit run app.py` pelo gerenciador utilizado.
