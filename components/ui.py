@@ -1,7 +1,8 @@
-"""Linguagem visual do FitOS: editorial, sóbria, mesma família do Brasil em Dados."""
+"""Primitivos Streamlit adaptados do design React lime-powered-fit-club."""
 from __future__ import annotations
 
 import html
+import base64
 from pathlib import Path
 from contextlib import contextmanager
 from typing import Iterable
@@ -137,6 +138,12 @@ def progress_html(value: float, maximum: float, color: str = ACCENT) -> str:
             f'aria-valuemin="0" aria-valuemax="100"><span style="width:{pct}%;background:{color}"></span></div>')
 
 
+def svg_image(svg: str) -> str:
+    # st.html intentionally strips inline SVG; an image keeps the vector intact.
+    data = base64.b64encode(svg.encode()).decode()
+    return f'<img src="data:image/svg+xml;base64,{data}" alt="" aria-hidden="true" class="fx-icon">'
+
+
 def exercise_rows(exercises, completed: dict | None = None) -> None:
     completed = completed or {}
     rows = []
@@ -144,7 +151,10 @@ def exercise_rows(exercises, completed: dict | None = None) -> None:
         name = pe.exercise.name_pt or pe.exercise.name_original
         count = completed.get(pe.id, 0)
         marks = ''.join(f'<i class="{"done" if n < count else ""}"></i>' for n in range(pe.sets))
-        thumb = '<div class="fx-media-off" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m6 6 12 12M3 7l4-4M17 21l4-4M2 10l8-8M14 22l8-8"/></svg></div>'
+        icon = svg_image('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" '
+                         'fill="none" stroke="#A4ADB9" stroke-width="1.6">'
+                         '<path d="m6 6 12 12M3 7l4-4M17 21l4-4M2 10l8-8M14 22l8-8"/></svg>')
+        thumb = f'<div class="fx-media-off" aria-hidden="true">{icon}</div>'
         rows.append(f'<div class="fx-ex"><span class="fx-ex-number">{i}</span>'
                     f'{thumb}<div class="fx-ex-body">'
                     f'<div class="fx-ex-t">{esc(name)}</div><div class="fx-ex-d">'
@@ -181,5 +191,5 @@ def app_chrome(title: str, name: str, profile_id: int, path: str) -> None:
              '<path d="m12 3 3 6 6 3-6 3-3 6-3-6-6-3 6-3z"/>']
     st.html('<nav class="fx-mobile-nav" aria-label="Navegação principal">' + ''.join(
         f'<a href="/{route}?perfil={profile_id}" target="_self"'+(' aria-current="page"' if route == path else '')
-        + f'><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">{icon}</svg>{label}</a>'
+        + '>' + svg_image(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#A4ADB9" stroke-width="1.6">{icon}</svg>') + f'{label}</a>'
         for (route,label),icon in zip(links,icons)) + '</nav>')

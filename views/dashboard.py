@@ -104,10 +104,11 @@ with right:
         meals = meal_summary.days.get(day_index, []) if meal_summary else []
         for ms in meals:
             meal = ms.meal
-            st.html(f'<div class="fx-meal"><b>{ui.esc(meal.meal_type)}</b><span> · {ms.macros.kcal:.0f} kcal</span>'
-                    f'<div class="fx-ex-d">{ui.esc(meal.title or ", ".join(i.food.short_name or i.food.name for i in meal.items))}</div></div>')
             was_eaten = meal.id in eaten
-            marked = st.checkbox("Refeição registrada", value=was_eaten, key=f"dashboard_meal_{meal.id}")
+            with st.container(key=f"meal-row-{meal.id}"):
+                marked = st.checkbox(f"{meal.meal_type} · {ms.macros.kcal:.0f} kcal", value=was_eaten,
+                                     key=f"dashboard_meal_{meal.id}")
+                st.caption(meal.title or ", ".join(i.food.short_name or i.food.name for i in meal.items))
             if marked != was_eaten:
                 with session_scope() as s:
                     if marked:
