@@ -122,7 +122,7 @@ with right:
             st.caption("Nenhuma refeição planejada para esta data.")
         st.page_link("views/plano_alimentar.py", label="Ver cardápio", icon=":material/restaurant:")
 
-budget = p.monthly_food_budget
+budget = f.month_budget
 st.html('<div class="fx-grid">'
         + ui.tile_html({"label": "Peso corporal", "value": f"{ui.fmt_num(f.weight, 1)} kg", "detail": delta_txt,
                         "foot": f"Meta {ui.fmt_num(target, 1)} kg" if target else "Meta não definida"})

@@ -73,8 +73,10 @@ with st.form("perfil"):
     prefs = st.text_area("Preferências", p.preferences or "",
                          placeholder="Ex.: prefiro refeições rápidas; não como beterraba")
     c1, c2 = st.columns(2)
-    budget = c1.number_input("Orçamento mensal para alimentação (R$)", 0.0, 100000.0,
-                             float(p.monthly_food_budget) if p.monthly_food_budget else None, 10.0, format="%.2f")
+    budget = c1.number_input("Orçamento mensal fixo para alimentação (R$)", 0.0, 100000.0,
+                             float(p.monthly_food_budget) if p.monthly_food_budget else None, 10.0, format="%.2f",
+                             help="Vale para todo mês sem valor próprio. Para um mês diferente, ajuste em "
+                                  "Mercado inteligente › Gastos; para uma compra, na lista de compras.")
     people = c2.number_input("Pessoas no planejamento alimentar", 1, 12, p.people_count or 1)
     ui.note("Restrições, alergias e preferências são aplicadas por palavras-chave aos cardápios gerados "
             "(ex.: “lactose”, “vegetariano”, “glúten”, “amendoim”, nome de um alimento). Confira sempre o resultado.")
@@ -101,6 +103,18 @@ if saved:
         st.rerun()
     except ValueError as exc:
         st.error(str(exc))
+
+st.subheader("Tema de cores")
+st.html('<div class="fx-tiles">' + "".join(ui.theme_swatch_html(k) for k in ui.THEMES) + "</div>")
+choice = st.radio("Tema deste perfil", list(ui.THEMES), index=list(ui.THEMES).index(ui.theme_key()),
+                  format_func=lambda k: ui.THEMES[k]["label"], horizontal=True,
+                  help="Vale só para este perfil, em todos os aparelhos.")
+if choice != ui.theme_key():
+    with session_scope() as s:
+        s.get(Profile, p.id).theme = choice
+    ui.set_theme(choice)
+    flash(f"Tema “{ui.THEMES[choice]['label']}” aplicado.")
+    st.rerun()
 
 with st.expander("Código de acesso", expanded=p.access_hash is None):
     if p.access_hash is None:

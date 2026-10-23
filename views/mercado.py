@@ -6,12 +6,14 @@ import plotly.graph_objects as go
 import streamlit as st
 from sqlalchemy import select
 
-from components import ui
+from components import scan_view, ui
 from components.state import flash, require_profile
 from database.connection import session_scope
 from database.models import Establishment, Food, PriceQuote, Product, ShoppingItem, ShoppingList
 from services import nutrition_service as ns
+from services import budget_service as bs
 from services import pricing_service as pr
+from services import product_scan as scan
 from services import shopping_service as sh
 from services.insights import month_spending
 from utils.units import UNIT_LABELS, UnitError, comparable_price, fmt_brl, fmt_qty, money
@@ -21,11 +23,15 @@ ui.page_header("Mercado inteligente", "Seus preços locais, normalizados por kg,
                "custo dos cardápios, a versão econômica e a lista de compras. Não há preços em tempo real: vale o "
                "que você cadastrar.")
 
-tabs = st.tabs(["Preços", "Comparar mercados", "Histórico de preços", "Lista de compras", "Custos do cardápio",
+tabs = st.tabs(["Escanear produto", "Preços", "Comparar mercados", "Histórico de preços", "Lista de compras", "Custos do cardápio",
                 "Gastos"])
 
-# ============================================================================ PREÇOS
+# ============================================================================ ESCANEAR
 with tabs[0]:
+    scan_view.render(p)
+
+# ============================================================================ PREÇOS
+with tabs[1]:
     with session_scope() as s:
         products = list(s.scalars(select(Product).order_by(Product.name)))
         ests = [e.name for e in s.scalars(select(Establishment).order_by(Establishment.name))]
@@ -104,19 +110,29 @@ with tabs[0]:
                                   cur.grams_per_unit if cur and cur.grams_per_unit else None, 1.0)
             dens = c2.number_input("Densidade (g/ml) — líquidos", 0.3, 2.0,
                                    cur.density_g_ml if cur and cur.density_g_ml else None, 0.01)
-            pnotes = st.text_input("Observações", cur.notes if cur and cur.notes else "")
+            c1, c2 = st.columns([1, 2])
+            pbarcode = c1.text_input("Código de barras (opcional)", cur.barcode if cur and cur.barcode else "",
+                                     placeholder="7891234567895")
+            pnotes = c2.text_input("Observações", cur.notes if cur and cur.notes else "")
             save = st.form_submit_button("Salvar produto")
         if save:
             try:
+                code = scan.normalize_barcode(pbarcode)
+                if pbarcode.strip() and not code:
+                    raise UnitError("Código de barras inválido (confira os dígitos).")
                 with session_scope() as s:
+                    other = scan.find_by_barcode(s, code) if code else None
+                    if other and (not cur or other.id != cur.id):
+                        raise UnitError(f"O código {code} já pertence a “{other.name}”.")
                     if cur:
                         obj = s.get(Product, cur.id)
+                        obj.barcode = code
                         obj.name, obj.category, obj.brand = name.strip() or obj.name, cat or None, brand or None
                         obj.food_id, obj.grams_per_unit, obj.density_g_ml = food_id, gpu or None, dens or None
                         obj.notes = pnotes or None
                     else:
                         pr.create_product(s, name, food_id, category=cat or None, brand=brand, grams_per_unit=gpu,
-                                          density_g_ml=dens, notes=pnotes)
+                                          density_g_ml=dens, notes=pnotes, barcode=code)
                 flash("Produto salvo.")
                 st.rerun()
             except UnitError as exc:
@@ -146,7 +162,7 @@ with tabs[0]:
                 st.rerun()
 
 # ============================================================================ COMPARAR
-with tabs[1]:
+with tabs[2]:
     with session_scope() as s:
         comps = pr.compare_establishments(s)
     multi = [c for c in comps if len(c.rows) > 1]
@@ -194,7 +210,7 @@ with tabs[1]:
                 st.success(f"Economia potencial escolhendo o mercado mais barato para a lista toda: {fmt_brl(hi - lo)}.")
 
 # ============================================================================ HISTÓRICO
-with tabs[2]:
+with tabs[3]:
     with session_scope() as s:
         quoted = list(s.scalars(select(Product).where(Product.quotes.any()).order_by(Product.name)))
         if quoted:
@@ -231,7 +247,7 @@ with tabs[2]:
                 st.rerun()
 
 # ============================================================================ LISTA
-with tabs[3]:
+with tabs[4]:
     with session_scope() as s:
         plan = ns.active_plan(s, p.id)
         lists = list(s.scalars(select(ShoppingList).where(ShoppingList.profile_id == p.id)
@@ -244,7 +260,8 @@ with tabs[3]:
                 c1, c2, c3 = st.columns(3)
                 first = c1.number_input("Do dia", 1, plan.days, 1)
                 last = c2.number_input("Até o dia", 1, plan.days, plan.days)
-                budget = c3.number_input("Orçamento (R$, opcional)", 0.0, 100000.0, None, 10.0, format="%.2f")
+                budget = c3.number_input("Quanto tenho para esta compra (R$, opcional)", 0.0, 100000.0, None, 10.0,
+                                         format="%.2f")
                 use_stock = st.checkbox("Descontar o que já tenho na despensa", True)
                 ok = st.form_submit_button("Gerar lista consolidada", type="primary")
             if ok:
@@ -257,6 +274,18 @@ with tabs[3]:
                 st.rerun()
             ui.note("Ingredientes repetidos viram uma linha só. Quantidades já convertidas para o peso comprado "
                     "(cru, com perdas de casca/aparas) e multiplicadas pelo número de pessoas do cardápio.")
+    with st.expander("Começar compra avulsa (sem cardápio)"):
+        with st.form("compra_avulsa"):
+            c1, c2 = st.columns([2, 1])
+            qname = c1.text_input("Nome", f"Compra de {date.today():%d/%m}")
+            qbudget = c2.number_input("Quanto tenho (R$, opcional)", 0.0, 100000.0, None, 10.0, format="%.2f")
+            qok = st.form_submit_button("Começar compra", type="primary")
+        ui.note("Os itens entram pela aba Escanear produto, já como comprados, e o saldo é atualizado a cada um.")
+        if qok:
+            with session_scope() as s:
+                sl = sh.create_quick_list(s, p.id, qname.strip(), money(qbudget) if qbudget else None)
+            st.session_state["lista_sel"] = st.session_state["scan_lista"] = sl.id
+            st.rerun()
     if lists:
         lmap = {x.id: f"{x.name} · {x.created_at:%d/%m} · {x.status}" for x in lists}
         sel = st.session_state.get("lista_sel")
@@ -267,16 +296,33 @@ with tabs[3]:
             t = sh.totals(sl)
             ests = [e.name for e in s.scalars(select(Establishment).order_by(Establishment.name))]
             est_names = {e.id: e.name for e in s.scalars(select(Establishment))}
+            cuts = sh.over_budget_cuts(sl, -t.vs_budget) if t.vs_budget is not None and t.vs_budget < 0 else []
+        cur_budget = float(sl.budget) if sl.budget is not None else None
+        new_budget = st.number_input("Quanto tenho para esta compra (R$)", 0.0, 100000.0, cur_budget, 10.0,
+                                     format="%.2f", key=f"orc_lista{lid}",
+                                     help="Pode mudar a qualquer momento, inclusive no mercado. Vazio = sem limite.")
+        if (money(new_budget) if new_budget else None) != sl.budget:
+            with session_scope() as s:
+                s.get(ShoppingList, lid).budget = money(new_budget) if new_budget else None
+            st.rerun()
         ui.tiles([
-            {"label": "Previsto (embalagens inteiras)", "value": fmt_brl(t.estimated), "accent": True},
+            {"label": "Previsto (embalagens inteiras)", "value": fmt_brl(t.estimated), "accent": t.budget is None},
             {"label": "Já pago", "value": fmt_brl(t.paid),
              "detail": f"previsto destes itens: {fmt_brl(t.estimated_of_purchased)}"},
             {"label": "Diferença vs previsto", "value": fmt_brl(t.vs_estimate),
              "detail": "positivo = economizou"},
             {"label": "Projeção final", "value": fmt_brl(t.projected),
-             "detail": (f"orçamento {fmt_brl(t.budget)} · sobra {fmt_brl(t.vs_budget)}" if t.budget is not None
-                        else "sem orçamento")},
+             "detail": (f"valor da compra {fmt_brl(t.budget)} · sobra {fmt_brl(t.vs_budget)}" if t.budget is not None
+                        else "sem valor definido")},
+            *([{"label": "Ainda posso gastar", "value": fmt_brl(t.budget - t.paid), "accent": True,
+                "detail": f"de {fmt_brl(t.budget)} · pendente previsto {fmt_brl(t.pending_estimated)}"}]
+              if t.budget is not None else []),
         ])
+        if t.budget is not None and t.paid > t.budget:
+            st.error(f"O que já foi pago passou {fmt_brl(t.paid - t.budget)} do valor desta compra.")
+        elif cuts:
+            st.warning(f"A projeção passa {fmt_brl(-t.vs_budget)} do valor desta compra. Para caber, deixe para "
+                       "depois: " + ", ".join(f"{it.label} ({fmt_brl(it.estimated_cost)})" for it in cuts) + ".")
         items = sorted(sl.items, key=lambda it: (it.purchased, it.label))
         df = pd.DataFrame([{
             "id": it.id, "comprado": it.purchased, "item": it.label,
@@ -335,7 +381,7 @@ with tabs[3]:
                     st.rerun()
 
 # ============================================================================ CUSTOS
-with tabs[4]:
+with tabs[5]:
     with session_scope() as s:
         plan = ns.active_plan(s, p.id)
         if plan:
@@ -377,20 +423,58 @@ with tabs[4]:
             ui.note("Sem preço (fora do total): " + ui.esc(", ".join(sorted(sm.unpriced))))
 
 # ============================================================================ GASTOS
-with tabs[5]:
+with tabs[6]:
+    today = date.today()
+    month_opts = [bs.month_key(date(today.year + (today.month - 1 + k) // 12, (today.month - 1 + k) % 12 + 1, 1))
+                  for k in (-1, 0, 1, 2)]
     with session_scope() as s:
         months = sh.monthly_spending(s, p.id)
         this_month = month_spending(s, p.id)
+        cur_key = bs.month_key()
+        budget_now = bs.budget_for(s, p)
+        chart_months = sorted({m for m, _ in months} | {cur_key})
+        budgets = bs.budgets_by_month(s, p, sorted(set(chart_months) | set(month_opts)))
+        overrides = {m for m in budgets if bs.month_override(s, p.id, m)}
+    fixed = p.monthly_food_budget
     ui.tiles([{"label": "Gasto neste mês", "value": fmt_brl(this_month), "accent": True,
-               "detail": f"orçamento {fmt_brl(p.monthly_food_budget)}" if p.monthly_food_budget else ""}])
+               "detail": f"orçamento {fmt_brl(budget_now)}" if budget_now else ""},
+              {"label": "Ainda disponível no mês", "value": fmt_brl(budget_now - this_month) if budget_now else "—",
+               "detail": ("valor definido para este mês" if cur_key in overrides
+                          else "orçamento fixo do perfil" if fixed else "defina um orçamento abaixo")}])
+
+    def _month_label(m: str) -> str:
+        y, mo = m.split("-")
+        return f"{mo}/{y}" + (" (este mês)" if m == cur_key else "")
+
+    with st.expander("Orçamento por mês", expanded=not budget_now):
+        ui.note(f"Orçamento fixo do perfil: {fmt_brl(fixed) if fixed else 'não definido'} (em Meu perfil). Aqui você "
+                "muda o valor de um mês específico sem alterar o fixo.")
+        with st.form("orc_mes"):
+            c1, c2 = st.columns([1, 1])
+            m_sel = c1.selectbox("Mês", month_opts, index=1, format_func=_month_label)
+            m_val = c2.number_input("Orçamento do mês (R$)", 0.0, 100000.0, None, 10.0, format="%.2f",
+                                    placeholder="vazio = usar o fixo")
+            ok = st.form_submit_button("Salvar orçamento do mês", type="primary")
+        if ok:
+            with session_scope() as s:
+                bs.set_month_budget(s, p.id, m_sel, money(m_val) if m_val else None)
+            flash(f"Orçamento de {_month_label(m_sel)}: "
+                  + (fmt_brl(money(m_val)) if m_val else "volta ao fixo do perfil") + ".")
+            st.rerun()
+        rows = [{"mês": _month_label(m), "orçamento": fmt_brl(budgets[m]) if budgets[m] else "—",
+                 "origem": "deste mês" if m in overrides else ("fixo" if budgets[m] else "—")} for m in month_opts]
+        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+
     if months:
         fig = go.Figure()
         fig.add_bar(x=[m for m, _ in months], y=[float(v) for _, v in months], name="Gasto",
                     marker=dict(color=ui.SERIES[0], line=dict(width=0)), hovertemplate="R$ %{y:.2f}<extra></extra>")
-        if p.monthly_food_budget:
-            fig.add_hline(y=float(p.monthly_food_budget), line=dict(color=ui.MUTED, width=1, dash="dot"),
-                          annotation_text="orçamento", annotation_font_color=ui.MUTED)
+        if any(budgets[m] for m in chart_months):
+            fig.add_scatter(x=chart_months, y=[float(budgets[m]) if budgets[m] else None for m in chart_months],
+                            name="Orçamento", mode="lines+markers", line=dict(color=ui.MUTED, width=1.5, dash="dot"),
+                            marker=dict(size=6, color=ui.MUTED), hovertemplate="R$ %{y:.2f}<extra>orçamento</extra>")
         fig.update_yaxes(tickprefix="R$ ")
+        fig.update_xaxes(type="category")
         ui.plot(ui.fig_layout(fig, "Compras registradas por mês", 280))
     else:
         st.info("As compras aparecem aqui quando itens da lista são marcados como comprados.")

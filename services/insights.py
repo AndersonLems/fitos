@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from database.models import Measurement, Profile, Purchase, WorkoutSession
 from services import nutrition_service as ns
 from services import profile_service as ps
+from services.budget_service import budget_for
 from services import workout_service as ws
 from services.inventory_service import expiring, list_items
 from utils.units import money
@@ -64,6 +65,7 @@ class Facts:
     consumed: ns.Macros
     expiring: list[str]
     missing: list[str]
+    month_budget: Decimal | None = None  # orçamento do mês corrente (ajuste do mês ou fixo do perfil)
 
     def as_dict(self) -> dict:
         w = self.weights
@@ -78,7 +80,7 @@ class Facts:
                 "treinos_previstos_semana": self.planned_week, "treino_hoje": self.today_title,
                 "custo_cardapio_dia": str(self.plan_cost_daily) if self.plan_cost_daily is not None else None,
                 "itens_sem_preco": self.plan_unpriced, "gasto_mes": str(self.month_spent),
-                "orcamento_mensal": str(self.profile.monthly_food_budget) if self.profile.monthly_food_budget else None,
+                "orcamento_mes": str(self.month_budget) if self.month_budget else None,
                 "consumido_hoje_kcal": round(self.consumed.kcal), "vencendo": self.expiring,
                 "dados_faltando": self.missing}
 
@@ -101,7 +103,8 @@ def collect(s: Session, p: Profile) -> Facts:
     consumed, _ = ns.consumed(s, p.id)
     exp = [i.food.short_name or i.food.name for i in expiring(list_items(s, p.id))]
     return Facts(p, weight, energy, weights_df(s, p.id), ws.sessions_in_week(s, p.id), planned_week, today_title,
-                 cost_daily, unpriced, month_spending(s, p.id), consumed, exp, ps.missing_for_personalization(p))
+                 cost_daily, unpriced, month_spending(s, p.id), consumed, exp, ps.missing_for_personalization(p),
+                 budget_for(s, p))
 
 
 def rule_recommendations(f: Facts) -> list[str]:
@@ -127,7 +130,7 @@ def rule_recommendations(f: Facts) -> list[str]:
     if f.plan_unpriced:
         out.append(f"{f.plan_unpriced} alimento(s) do cardápio estão sem preço cadastrado; o custo exibido está "
                    "incompleto.")
-    b = f.profile.monthly_food_budget
+    b = f.month_budget
     if b and f.plan_cost_daily is not None and f.plan_cost_daily * 30 * max(1, f.profile.people_count or 1) > b:
         out.append("O cardápio ativo projeta gasto acima do orçamento mensal. Gere a versão econômica em "
                    "Meu Plano Alimentar.")

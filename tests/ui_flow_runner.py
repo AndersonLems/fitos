@@ -62,4 +62,36 @@ with session_scope() as s:
 for page in ['biblioteca', 'plano_alimentar', 'mercado', 'despensa', 'evolucao', 'personal_ia', 'perfil', 'configuracoes']:
     app.switch_page(f'views/{page}.py').run()
     assert not app.exception, (page, app.exception)
+# Mercado: produto novo pelo código digitado (sem rede: o Open Food Facts “não conhece” o código).
+from decimal import Decimal
+from database.models import PriceQuote, Product, ShoppingList
+from services import product_scan, shopping_service as sh
+product_scan._off_cache['7891000100103'] = None
+with session_scope() as s:
+    quick = sh.create_quick_list(s, pid, 'Compra de teste', 50).id
+app.session_state['scan_lista'] = quick
+app.switch_page('views/mercado.py').run()
+next(r for r in app.radio if r.key == 'scan_modo').set_value('Digitar código').run()
+next(t for t in app.text_input if t.key == 'scan_txt0').input('7891000100103').run()
+assert not app.exception, app.exception
+next(t for t in app.text_input if t.label == 'Nome').input('Arroz integral teste')
+next(t for t in app.text_input if t.label == 'Preço da embalagem (R$)').input('8,90')
+next(b for b in app.button if b.label == 'Cadastrar e salvar preço').click().run()
+assert not app.exception, app.exception
+with session_scope() as s:
+    prod = s.scalar(select(Product).where(Product.barcode == '7891000100103'))
+    assert prod is not None and prod.name == 'Arroz integral teste'
+    assert s.scalar(select(PriceQuote).where(PriceQuote.product_id == prod.id)).price == Decimal('8.90')
+    assert sh.totals(sh.load_list(s, quick)).paid == Decimal('8.90')
+next(n for n in app.number_input if n.key == f'orc_lista{quick}').set_value(80.0).run()
+assert not app.exception, app.exception
+with session_scope() as s:
+    assert s.get(ShoppingList, quick).budget == 80
+# Tema por perfil
+app.switch_page('views/perfil.py').run()
+next(r for r in app.radio if r.label == 'Tema deste perfil').set_value('brasa').run()
+assert not app.exception, app.exception
+with session_scope() as s:
+    assert s.get(Profile, pid).theme == 'brasa'
+assert app.session_state['tema'] == 'brasa'
 print('All ten pages and workout/meal persistence passed.')

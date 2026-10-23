@@ -24,6 +24,7 @@ from services import shopping_service as sh
 from services import workout_service as ws
 from services.inventory_service import list_items, stock_summary_text
 from services.ai_planner import profile_brief
+from services.budget_service import budget_for
 from utils.units import comparable_price, fmt_brl
 
 HISTORY_LIMIT = 12
@@ -175,8 +176,9 @@ def build_context(s: Session, p: Profile) -> str:
                      f"(itens sem preço: {len(sm.unpriced)})")
     else:
         lines.append("Sem cardápio ativo.")
-    if p.monthly_food_budget:
-        lines.append(f"Orçamento mensal de alimentação: {fmt_brl(p.monthly_food_budget)}")
+    budget = budget_for(s, p)
+    if budget:
+        lines.append(f"Orçamento de alimentação deste mês: {fmt_brl(budget)}")
     lines.append("Estoque: " + stock_summary_text(list_items(s, p.id))[:700])
     return "\n".join(lines)
 

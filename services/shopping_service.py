@@ -197,3 +197,55 @@ def monthly_spending(s: Session, profile_id: int) -> list[tuple[str, Decimal]]:
         k = p.purchased_on.strftime("%Y-%m")
         rows[k] = rows.get(k, Decimal(0)) + p.amount
     return sorted(rows.items())
+
+
+def create_quick_list(s: Session, profile_id: int, name: str, budget: Decimal | None = None) -> ShoppingList:
+    """Compra avulsa, sem cardápio: os itens entram pelo leitor de produtos já como comprados."""
+    sl = ShoppingList(profile_id=profile_id, meal_plan_id=None, name=(name or "Compra avulsa")[:120], budget=budget)
+    s.add(sl)
+    s.flush()
+    return sl
+
+
+def register_scanned_purchase(s: Session, sl: ShoppingList, quote: PriceQuote, packages: int, *,
+                              paid_price=None, add_to_stock: bool = True, profile_id: int) -> ShoppingItem:
+    """Lança na lista o produto identificado no mercado, já como comprado.
+
+    Se a lista tem um item pendente do mesmo alimento, ele é marcado; senão entra um item novo.
+    """
+    product = quote.product
+    packages = max(1, int(packages))
+    paid = money(paid_price) if paid_price not in (None, "") else money(quote.price * packages)
+    pending = None
+    if product.food_id:
+        pending = next((it for it in sl.items if it.food_id == product.food_id and not it.purchased), None)
+    if pending is None:
+        pkg_base, base = to_base(quote.package_qty, quote.unit)
+        gpb = grams_per_base(product, base)
+        qty, unit = (pkg_base * gpb * packages, "g") if gpb else (pkg_base * packages, base)
+        pending = ShoppingItem(list_id=sl.id, food_id=product.food_id, label=product.name[:160],
+                               needed_base=qty.quantize(Decimal("0.001")), to_buy_base=qty.quantize(Decimal("0.001")),
+                               base_unit=unit, packages=packages,
+                               package_label=f"{fmt_qty(pkg_base, base)} · {product.name}"[:60],
+                               estimated_cost=money(quote.price * packages))
+        s.add(pending)
+        sl.items.append(pending)
+        s.flush()
+        # sem conversão para gramas o estoque ficaria em unidade errada: não lança na despensa
+        add_to_stock = add_to_stock and unit == "g"
+    pending.product_id, pending.quote_id = product.id, quote.id
+    pending.establishment_id = quote.establishment_id
+    mark_purchased(s, pending, True, paid_price=paid, qty=packages, add_to_stock=add_to_stock, profile_id=profile_id)
+    s.flush()
+    return pending
+
+
+def over_budget_cuts(sl: ShoppingList, excess: Decimal) -> list[ShoppingItem]:
+    """Itens pendentes, do mais caro ao mais barato, que bastam para caber no valor disponível."""
+    out, total = [], Decimal(0)
+    for it in sorted((i for i in sl.items if not i.purchased and i.estimated_cost), key=lambda i: -i.estimated_cost):
+        if total >= excess:
+            break
+        out.append(it)
+        total += it.estimated_cost
+    return out

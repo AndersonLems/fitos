@@ -28,7 +28,6 @@ def bootstrap() -> dict:
     return out
 
 
-ui.inject_css()
 bootstrap()
 
 pages = {
@@ -49,12 +48,14 @@ with session_scope() as _s:
     profiles = ps.list_profiles(_s)
 
 pid = auth.authenticated_profile(profiles)
+me = next((p for p in profiles if p.id == pid), None)
+ui.set_theme(me.theme if me else None)
+ui.inject_css()
 if pid is None:
     # A navegação é registrada (oculta) para o endereço pedido continuar válido depois da entrada.
     st.navigation(pages, position="hidden")
     auth.login_screen(profiles)
     st.stop()
-me = next(p for p in profiles if p.id == pid)
 
 st.logo("assets/logo.svg", size="large", icon_image="assets/icone.svg")
 with st.sidebar:

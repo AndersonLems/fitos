@@ -13,6 +13,8 @@
   --border: #2a3039;
   --line: #ffffff10;
   --acento: #b5f24a;
+  --on-acento: #203019;
+  --track: #29313c;
   --warn: #e4b568;
   --bad: #df7770;
   --radius: 14px;
@@ -99,7 +101,7 @@ h3,
   padding: 0 32px;
   font-size: 12px;
   color: var(--muted);
-  background: #0b0d10ed;
+  background: color-mix(in srgb, var(--page) 93%, transparent);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--line);
 }
@@ -304,16 +306,16 @@ h3,
   margin: 0;
 }
 .fx-chip.ok {
-  background: #b5f24a1f;
+  background: color-mix(in srgb, var(--acento) 12%, transparent);
   color: var(--acento);
 }
 .fx-chip.warn,
 .fx-prov {
-  background: #e4b5681f;
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
   color: var(--warn);
 }
 .fx-chip.bad {
-  background: #df77701f;
+  background: color-mix(in srgb, var(--bad) 12%, transparent);
   color: var(--bad);
 }
 .fx-day {
@@ -401,7 +403,7 @@ h3,
   width: 16px;
   height: 6px;
   border-radius: 4px;
-  background: #29313c;
+  background: var(--track);
 }
 .fx-sets i.done {
   background: var(--acento);
@@ -470,7 +472,7 @@ h3,
   height: 100%;
 }
 .st-key-workout-hero {
-  background: radial-gradient(ellipse at top right, #b5f24a0f, transparent 55%), var(--surface);
+  background: radial-gradient(ellipse at top right, color-mix(in srgb, var(--acento) 6%, transparent), transparent 55%), var(--surface);
 }
 .st-key-workout-hero [data-testid="stHtml"]:has(> .fx-eyebrow) {
   display: flex;
@@ -705,7 +707,7 @@ button:active {
   transform: scale(0.98);
 }
 button[kind="primary"] {
-  color: #203019;
+  color: var(--on-acento);
   font-weight: 600;
 }
 button:focus-visible,
@@ -853,7 +855,7 @@ a:focus-visible {
     left: 0;
     right: 0;
     z-index: 999;
-    background: #0b0d10f5;
+    background: color-mix(in srgb, var(--page) 96%, transparent);
     border-top: 1px solid var(--line);
     padding-bottom: env(safe-area-inset-bottom);
   }
@@ -932,4 +934,97 @@ a:focus-visible {
     animation-iteration-count: 1 !important;
     transition-duration: 1ms !important;
   }
+}
+
+/* ------------------------------------------------------------------ tema por perfil
+   O config.toml fixa as cores dos widgets nativos; aqui o acento e as superfícies seguem o tema. */
+.stApp,
+[data-testid="stSidebar"],
+[data-testid="stSidebarContent"] {
+  background-color: var(--page) !important;
+}
+button[kind="primary"],
+button[kind="primaryFormSubmit"] {
+  background-color: var(--acento) !important;
+  border-color: var(--acento) !important;
+  color: var(--on-acento) !important;
+}
+button[kind="primary"]:hover,
+button[kind="primaryFormSubmit"]:hover {
+  background-color: color-mix(in srgb, var(--acento) 86%, #fff) !important;
+}
+button[kind="primary"] p,
+button[kind="primaryFormSubmit"] p {
+  color: var(--on-acento) !important;
+}
+button[kind="secondary"]:hover,
+button[kind="secondaryFormSubmit"]:hover {
+  border-color: var(--acento) !important;
+  color: var(--acento) !important;
+}
+[data-baseweb="tab-highlight"],
+[data-testid="stTab"][aria-selected="true"] > div:not([data-testid]) {
+  background-color: var(--acento) !important;
+}
+.stTabs [aria-selected="true"] p {
+  color: var(--ink) !important;
+}
+[data-testid="stCheckbox"] label:has(input[type="checkbox"]:checked) > span + div,
+[data-testid="stRadioOption"]:has(input:checked) > div > div:first-child {
+  background-color: var(--acento) !important;
+  border-color: var(--acento) !important;
+}
+[data-testid="stCheckbox"] label:has(input[type="checkbox"]:checked) > span + div svg {
+  stroke: var(--on-acento) !important;
+}
+[data-baseweb="input"]:focus-within,
+[data-baseweb="textarea"]:focus-within,
+[data-baseweb="select"] > div:focus-within {
+  border-color: var(--acento) !important;
+}
+[data-baseweb="input"],
+[data-baseweb="base-input"],
+[data-baseweb="textarea"],
+[data-baseweb="select"] > div,
+[data-baseweb="input"] input,
+[data-baseweb="textarea"] textarea {
+  background-color: var(--surface) !important;
+}
+[data-testid="stMarkdownContainer"] a,
+[data-testid="stPageLink"] a span {
+  color: var(--acento);
+}
+[data-testid="stFileUploaderDropzone"],
+[data-testid="stCameraInput"] > div {
+  background-color: var(--surface) !important;
+}
+
+.fx-swatch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid;
+  border-radius: 10px;
+  font-size: 13px;
+}
+.fx-swatch b {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  font-size: 12px;
+}
+.fx-swatch span {
+  margin-right: auto;
+}
+.fx-swatch div {
+  display: flex;
+  gap: 4px;
+}
+.fx-swatch i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
 }

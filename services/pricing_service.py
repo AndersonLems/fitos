@@ -149,14 +149,19 @@ def compare_establishments(s: Session) -> list[Comparison]:
 
 def create_product(s: Session, name: str, food_id: int | None, *, category: str | None = None,
                    brand: str | None = None, grams_per_unit: float | None = None,
-                   density_g_ml: float | None = None, notes: str | None = None) -> Product:
+                   density_g_ml: float | None = None, notes: str | None = None,
+                   barcode: str | None = None) -> Product:
     name = (name or "").strip()
     if not name:
         raise UnitError("Informe o nome do produto.")
+    barcode = (barcode or "").strip() or None
+    if barcode and s.scalar(select(Product.id).where(Product.barcode == barcode)):
+        raise UnitError(f"Já existe um produto com o código de barras {barcode}.")
     if food_id is not None and not s.get(Food, food_id):
         raise UnitError("Alimento inexistente.")
     p = Product(name=name[:160], food_id=food_id, category=category, brand=brand or None,
-                grams_per_unit=grams_per_unit or None, density_g_ml=density_g_ml or None, notes=notes or None)
+                grams_per_unit=grams_per_unit or None, density_g_ml=density_g_ml or None, notes=notes or None,
+                barcode=barcode)
     s.add(p)
     s.flush()
     return p

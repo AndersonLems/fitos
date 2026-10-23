@@ -56,6 +56,7 @@ class Profile(TimestampMixin, Base):
     people_count: Mapped[int] = mapped_column(Integer, default=1)
     # código de acesso do perfil (PBKDF2 com sal); None = perfil antigo, entra com o código da instalação
     access_hash: Mapped[str | None] = mapped_column(String(200))
+    theme: Mapped[str | None] = mapped_column(String(20))  # chave de components.ui.THEMES; None = padrão
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
 
     measurements: Mapped[list[Measurement]] = relationship(back_populates="profile", cascade="all, delete-orphan")
@@ -348,6 +349,7 @@ class Product(Base):
     category: Mapped[str | None] = mapped_column(String(60))
     food_id: Mapped[int | None] = mapped_column(ForeignKey("foods.id"), index=True)
     brand: Mapped[str | None] = mapped_column(String(80))
+    barcode: Mapped[str | None] = mapped_column(String(32), index=True)  # EAN/GTIN lido da embalagem
     grams_per_unit: Mapped[float | None] = mapped_column(Float)  # p/ itens vendidos por unidade (ex.: ovo)
     density_g_ml: Mapped[float | None] = mapped_column(Float)  # p/ líquidos (ex.: leite)
     notes: Mapped[str | None] = mapped_column(Text)
@@ -372,6 +374,17 @@ class PriceQuote(TimestampMixin, Base):
 
     product: Mapped[Product] = relationship(back_populates="quotes")
     establishment: Mapped[Establishment | None] = relationship()
+
+
+class MonthlyBudget(Base):
+    """Orçamento de alimentação de um mês específico; sem linha, vale o orçamento fixo do perfil."""
+    __tablename__ = "monthly_budgets"
+    __table_args__ = (UniqueConstraint("profile_id", "month", name="uq_budget_month"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    profile_id: Mapped[int] = mapped_column(ForeignKey("profiles.id", ondelete="CASCADE"))
+    month: Mapped[str] = mapped_column(String(7))  # AAAA-MM
+    amount: Mapped[Decimal] = mapped_column(Money)
 
 
 class InventoryItem(Base):

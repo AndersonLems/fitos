@@ -11,16 +11,78 @@ import plotly.graph_objects as go
 import plotly.io as pio
 import streamlit as st
 
-# Paleta categórica validada (CVD/contraste) para a superfície escura #14181E
-SERIES = ["#B5F24A", "#6eaddb", "#e4b568", "#9a7ce0", "#e0584f"]
-INK, INK2, MUTED, GRID, AXIS, SURFACE = "#F3F5F7", "#A4ADB9", "#737D8A", "#2A3039", "#383d47", "#14181E"
-ACCENT = "#B5F24A"
-GOOD, WARN, BAD = "#B5F24A", "#d9a75f", "#e86370"
+# --------------------------------------------------------------------------- temas
+# Três temas escuros: os widgets nativos do Streamlit vêm do .streamlit/config.toml (base escura) e só
+# o acento e as superfícies são trocados por CSS, então um tema claro deixaria tabelas e campos destoando.
+# Cada série categórica foi escolhida para separar bem na superfície do próprio tema.
+THEMES: dict[str, dict] = {
+    "lima": {
+        "label": "Lima", "page": "#0b0d10", "surface": "#14181e", "chip": "#1b2027", "ink": "#f3f5f7",
+        "ink2": "#a4adb9", "muted": "#737d8a", "border": "#2a3039", "axis": "#383d47", "track": "#29313c",
+        "accent": "#b5f24a", "on_accent": "#203019", "warn": "#e4b568", "bad": "#df7770",
+        "series": ["#B5F24A", "#6eaddb", "#e4b568", "#9a7ce0", "#e0584f"],
+    },
+    "oceano": {
+        "label": "Oceano", "page": "#080d14", "surface": "#0f1722", "chip": "#16202d", "ink": "#eef3f8",
+        "ink2": "#9fb1c4", "muted": "#6c7f93", "border": "#22303f", "axis": "#2f3e50", "track": "#223040",
+        "accent": "#5cc8ff", "on_accent": "#032435", "warn": "#e8b864", "bad": "#f0727a",
+        "series": ["#5cc8ff", "#b9e769", "#e8b864", "#b392f0", "#f0727a"],
+    },
+    "brasa": {
+        "label": "Brasa", "page": "#0f0b09", "surface": "#1a1411", "chip": "#231b17", "ink": "#f8f1ec",
+        "ink2": "#c2b1a6", "muted": "#8c7a6e", "border": "#362a23", "axis": "#45362d", "track": "#3a2d26",
+        "accent": "#ff8f4f", "on_accent": "#381402", "warn": "#f2c45a", "bad": "#ef6f8a",
+        "series": ["#ff8f4f", "#6ab7e6", "#f2c45a", "#a98be6", "#5fcfa0"],
+    },
+}
+DEFAULT_THEME = "lima"
+THEME_KEY = "tema"
 
+# Nomes antigos (ui.SERIES, ui.ACCENT…) resolvidos pelo tema da sessão: o módulo é compartilhado entre
+# sessões, então as cores não podem ser globais mutáveis.
+_TOKENS = {"SERIES": "series", "INK": "ink", "INK2": "ink2", "MUTED": "muted", "GRID": "border", "AXIS": "axis",
+           "SURFACE": "surface", "ACCENT": "accent", "GOOD": "accent", "WARN": "warn", "BAD": "bad"}
+
+
+def theme_key() -> str:
+    try:
+        key = st.session_state.get(THEME_KEY)
+    except Exception:  # noqa: BLE001 — fora de uma execução do Streamlit (testes de serviço)
+        key = None
+    return key if key in THEMES else DEFAULT_THEME
+
+
+def theme() -> dict:
+    return THEMES[theme_key()]
+
+
+def set_theme(key: str | None) -> None:
+    st.session_state[THEME_KEY] = key if key in THEMES else DEFAULT_THEME
+
+
+def __getattr__(name: str):
+    if name in _TOKENS:
+        return theme()[_TOKENS[name]]
+    raise AttributeError(name)
+
+
+def _theme_css(t: dict) -> str:
+    return (":root{" + f"--page:{t['page']};--surface:{t['surface']};--chip:{t['chip']};--ink:{t['ink']};"
+            f"--ink-2:{t['ink2']};--muted:{t['muted']};--border:{t['border']};--track:{t['track']};"
+            f"--acento:{t['accent']};--on-acento:{t['on_accent']};--warn:{t['warn']};--bad:{t['bad']}" + "}")
 
 
 def inject_css() -> None:
-    st.html("<style>" + (Path(__file__).resolve().parents[1] / "assets/theme.css").read_text() + "</style>")
+    css = (Path(__file__).resolve().parents[1] / "assets/theme.css").read_text()
+    st.html("<style>" + css + _theme_css(theme()) + "</style>")
+
+
+def theme_swatch_html(key: str) -> str:
+    t = THEMES[key]
+    dots = "".join(f'<i style="background:{c}"></i>' for c in t["series"][:4])
+    return (f'<div class="fx-swatch" style="background:{t["surface"]};border-color:{t["border"]};color:{t["ink"]}">'
+            f'<b style="background:{t["accent"]};color:{t["on_accent"]}">Aa</b><span>{esc(t["label"])}</span>'
+            f'<div>{dots}</div></div>')
 
 
 def esc(v) -> str:
@@ -77,35 +139,39 @@ def media_html(url: str | None, alt: str, cls: str = "fx-thumb") -> str:
 
 # --------------------------------------------------------------------------- plotly
 
-def _register_template() -> None:
-    if "fitos" in pio.templates:
-        return
-    axis = dict(gridcolor=GRID, linecolor=AXIS, zeroline=False, tickcolor=AXIS, automargin=True,
-                tickfont=dict(color=MUTED, size=11), title=dict(font=dict(color=MUTED, size=11)))
+def _template_name() -> str:
+    key = theme_key()
+    name = f"fitos-{key}"
+    if name in pio.templates:
+        return name
+    th = THEMES[key]
+    axis = dict(gridcolor=th["border"], linecolor=th["axis"], zeroline=False, tickcolor=th["axis"], automargin=True,
+                tickfont=dict(color=th["muted"], size=11), title=dict(font=dict(color=th["muted"], size=11)))
     t = go.layout.Template()
     t.layout = go.Layout(
-        font=dict(family="Geist, system-ui, sans-serif", color=INK2, size=12),
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", colorway=SERIES,
+        font=dict(family="Geist, system-ui, sans-serif", color=th["ink2"], size=12),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", colorway=th["series"],
         xaxis=dict(axis, showgrid=False, showline=True, ticks="outside", ticklen=4),
         yaxis=dict(axis, showgrid=True, showline=False, nticks=6, tickformat=",~f"),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0, font=dict(color=INK2, size=12),
-                    bgcolor="rgba(0,0,0,0)", itemsizing="constant", itemwidth=30, title=None),
-        margin=dict(l=4, r=12, t=8, b=4), hoverlabel=dict(bgcolor=SURFACE, bordercolor=AXIS, font=dict(color=INK)),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0,
+                    font=dict(color=th["ink2"], size=12), bgcolor="rgba(0,0,0,0)", itemsizing="constant",
+                    itemwidth=30, title=None),
+        margin=dict(l=4, r=12, t=8, b=4),
+        hoverlabel=dict(bgcolor=th["surface"], bordercolor=th["axis"], font=dict(color=th["ink"])),
         hovermode="x unified", separators=",.", bargap=0.42, barcornerradius=4, showlegend=True,
     )
-    t.data.scatter = [go.Scatter(line=dict(width=2), marker=dict(size=8, line=dict(width=1.5, color=SURFACE)))]
+    t.data.scatter = [go.Scatter(line=dict(width=2), marker=dict(size=8, line=dict(width=1.5, color=th["surface"])))]
     t.data.bar = [go.Bar(marker=dict(line=dict(width=0)))]
-    pio.templates["fitos"] = t
-
-
-_register_template()
+    pio.templates[name] = t
+    return name
 
 
 def fig_layout(fig: go.Figure, title: str | None = None, height: int = 300, caption: str | None = None) -> go.Figure:
     """O título e a legenda ficam fora da área do gráfico; o título é desenhado pelo cartão em plot()."""
     legend = sum(1 for tr in fig.data if tr.showlegend is not False) >= 2
-    fig.update_layout(template="fitos", height=height, title=None, showlegend=legend,
-                      paper_bgcolor=SURFACE, plot_bgcolor=SURFACE,
+    surface = theme()["surface"]
+    fig.update_layout(template=_template_name(), height=height, title=None, showlegend=legend,
+                      paper_bgcolor=surface, plot_bgcolor=surface,
                       margin=dict(t=36 if legend else 8),
                       meta={"title": title, "caption": caption})
     return fig
@@ -166,7 +232,8 @@ def loading(label: str, rows: int = 3):
         placeholder.empty()
 
 
-def progress_html(value: float, maximum: float, color: str = ACCENT) -> str:
+def progress_html(value: float, maximum: float, color: str | None = None) -> str:
+    color = color or theme()["accent"]
     pct = max(0, min(100, float(value) / float(maximum) * 100)) if maximum else 0
     return (f'<div class="fx-track" role="progressbar" aria-label="Progresso" aria-valuenow="{pct:.0f}" '
             f'aria-valuemin="0" aria-valuemax="100"><span style="width:{pct}%;background:{color}"></span></div>')
@@ -209,5 +276,5 @@ def app_chrome(title: str, name: str, path: str) -> None:
              '<path d="m12 3 3 6 6 3-6 3-3 6-3-6-6-3 6-3z"/>']
     st.html('<nav class="fx-mobile-nav" aria-label="Navegação principal">' + ''.join(
         f'<a href="/{route}" target="_self"'+(' aria-current="page"' if route == path else '')
-        + '>' + svg_image(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#A4ADB9" stroke-width="1.6">{icon}</svg>') + f'{label}</a>'
+        + '>' + svg_image(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="{theme()["ink2"]}" stroke-width="1.6">{icon}</svg>') + f'{label}</a>'
         for (route,label),icon in zip(links,icons)) + '</nav>')

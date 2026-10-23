@@ -32,11 +32,11 @@ e o catálogo de exercícios é baixado do ExerciseDB (~1–2 min, só uma vez; 
 | Meus treinos | Treino de hoje (com troca do dia), registro de séries, cronômetro, ficha, versões, progressão; “Ver execução” abre GIF, prescrição, passos e últimas cargas |
 | Biblioteca de exercícios | Busca, GIF/vídeo, instruções, erros comuns, fonte e licença |
 | Meu plano alimentar | Cardápios de 1/7/15/30/31 dias, macros e custos por refeição/dia, versão econômica, substituições |
-| Mercado inteligente | Preços por estabelecimento, comparação, histórico, lista de compras interativa, custos, gastos |
+| Mercado inteligente | Escanear produto (código de barras ou etiqueta com IA), preços por estabelecimento, comparação, histórico, lista de compras com “quanto tenho para esta compra”, compra avulsa, custos, gastos e orçamento por mês |
 | Minha despensa | Estoque com validade; “O que posso preparar hoje?” e refeições de amanhã com o que há em casa |
 | Minha evolução | Peso com média móvel, medidas, fotos, frequência, cargas e análise opcional pelo Gemini |
 | Meu personal IA | Chat com ferramentas estruturadas; alterações só após confirmação |
-| Meu perfil | Dados obrigatórios e opcionais, estimativa energética, exclusão do perfil |
+| Meu perfil | Dados obrigatórios e opcionais, estimativa energética, orçamento fixo, tema de cores (Lima, Oceano, Brasa), exclusão do perfil |
 | Configurações | Modelo Gemini, uso de tokens, backup, exportação CSV/JSON, exclusão de dados |
 
 ## Arquitetura
@@ -44,11 +44,13 @@ e o catálogo de exercícios é baixado do ExerciseDB (~1–2 min, só uma vez; 
 ```
 app.py                  navegação, perfis, onboarding, portão de acesso
 views/                  uma página por arquivo (st.navigation)
-components/             ui.py (tema editorial), auth.py, state.py, timer.py
+components/             ui.py (temas e primitivos), auth.py, state.py, timer.py, scan_view.py
 services/               regras de negócio — determinísticas, sem Streamlit
   nutrition_service     macros (TACO), cru/cozido/comprado, gerador local, versão econômica
   pricing_service       cotações, normalização R$/kg|l|un, melhor preço, comparação
-  shopping_service      consolidação, estoque, embalagens, totais, compras
+  shopping_service      consolidação, estoque, embalagens, totais, compras, compra avulsa
+  budget_service        orçamento fixo do perfil com ajuste por mês
+  product_scan          código de barras (zxing-cpp), Open Food Facts, leitura de etiqueta pelo Gemini
   workout_service       fichas, versões, treino do dia, sessões, progressão conservadora
   gemini_service        cliente, saídas estruturadas (Pydantic), nova tentativa, uso de tokens
   ai_planner            prompts compactos + validação contra o catálogo local
@@ -56,7 +58,7 @@ services/               regras de negócio — determinísticas, sem Streamlit
 integrations/           exercisedb.py, wger.py, workoutdb.py (não disponível)
 database/               models.py, connection.py; migrations/ (Alembic)
 utils/units.py          Decimal, unidades, embalagens
-tests/                  pytest (41 testes)
+tests/                  pytest
 ```
 
 Separação pedida no projeto: o Python calcula nutrientes, conversões, rendimento, preços, embalagens,
@@ -70,6 +72,20 @@ Nenhuma chamada ao Gemini é automática. Fichas e cardápios têm **gerador loc
 Gemini. Planos de 15–31 dias usam 7 cardápios distintos em ciclo. O chat envia contexto resumido e as
 últimas 12 mensagens; ações de alteração não fazem segunda chamada. Leituras geradas (painel, evolução)
 ficam salvas e só são refeitas quando você pede. O uso fica registrado em Configurações.
+
+### Mercado: orçamento, leitura de produtos e temas
+
+- **Orçamento:** o valor de Meu perfil é o fixo mensal; em Mercado › Gastos dá para definir outro valor para
+  um mês específico (vazio volta ao fixo). Cada lista de compras tem o seu “quanto tenho para esta compra”,
+  editável a qualquer momento, com o saldo “ainda posso gastar” e a sugestão dos itens mais caros a deixar
+  para depois quando a projeção passa do valor.
+- **Escanear produto:** o código de barras é lido localmente (zxing-cpp, EAN/UPC com dígito verificador). Se
+  o produto não estiver cadastrado, só o código é consultado no [Open Food Facts](https://world.openfoodfacts.org)
+  para trazer nome, marca e conteúdo. “Ler etiqueta com IA” é opcional, uma chamada ao Gemini por foto, e lê
+  nome, conteúdo e preço da gôndola. Tudo aparece para conferência antes de salvar; o item pode entrar direto
+  como comprado na lista da compra (ou numa compra avulsa, sem cardápio).
+- **Temas:** três temas escuros por perfil. Os widgets nativos do Streamlit vêm do `config.toml`; o tema troca
+  acento e superfícies por CSS, então tabelas (desenhadas em canvas) mantêm o tom escuro padrão.
 
 ## Fontes e decisões
 
@@ -127,3 +143,10 @@ Cobrem unidades e Decimal, normalização de preços, rendimento e fator comest�
 embalagens, estoque (validade, unidades), totais da lista, estimativa energética, gerador local,
 versão econômica, divisão de treino, limitações, troca do treino do dia, progressão conservadora e
 validação das saídas/ações do Gemini.
+
+### GroqCloud como alternativa automática
+
+O Gemini continua como padrão. Se falhar (rede, cota, chave, resposta vazia ou inválida),
+o FitOS tenta a GroqCloud, incluindo as ferramentas do chat e a validação dos planos.
+Configure `GROQ_API_KEY` no `.env`; `GROQ_MODEL` define o modelo
+(padrão: `qwen/qwen3.8-27b`). Reinicie o app após alterar o ambiente.

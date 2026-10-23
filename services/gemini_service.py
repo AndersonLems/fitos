@@ -15,7 +15,7 @@ from typing import TypeVar
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy.orm import Session
 
-from config.settings import GEMINI_MODEL_DEFAULT, gemini_api_key, logger
+from config.settings import GEMINI_MODEL_DEFAULT, GROQ_MODEL_DEFAULT, gemini_api_key, groq_api_key, logger
 from database.models import AIInsight, AIUsage, Setting
 
 T = TypeVar("T", bound=BaseModel)
@@ -45,7 +45,7 @@ def current_model(s: Session) -> str:
 
 
 def is_configured() -> bool:
-    return gemini_api_key() is not None
+    return gemini_api_key() is not None or groq_api_key() is not None
 
 
 _client = None
@@ -91,7 +91,7 @@ def _failure_message(exc: Exception, model: str) -> str:
             "Verifique a conexão, a chave e o modelo em Configurações.")
 
 
-def _call(s: Session, *, contents, config, purpose: str, profile_id: int | None):
+def _call_gemini(s: Session, *, contents, config, purpose: str, profile_id: int | None):
     model = current_model(s)
     for attempt in range(len(RETRY_DELAYS) + 1):
         try:
@@ -112,6 +112,47 @@ def _call(s: Session, *, contents, config, purpose: str, profile_id: int | None)
     return resp
 
 
+def last_model(s: Session) -> str:
+    return s.info.get("ai_model", current_model(s))
+
+
+def last_provider(s: Session) -> str:
+    return s.info.get("ai_provider", "gemini")
+
+
+def _call_groq(s: Session, **kwargs):
+    from services.groq_service import generate_content
+    try:
+        resp = generate_content(contents=kwargs["contents"], config=kwargs["config"])
+    except Exception as exc:
+        _log_usage(s, kwargs["profile_id"], kwargs["purpose"], GROQ_MODEL_DEFAULT, None, False)
+        logger.warning("GroqCloud falhou (%s): %s", kwargs["purpose"], type(exc).__name__)
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+        if status == 429:
+            raise GeminiUnavailable("O GroqCloud atingiu a cota ou o limite de requisições (429). Confira o uso da API GroqCloud.") from exc
+        raise GeminiUnavailable("O GroqCloud também não respondeu. Confira a chave GroqCloud, a cota e a conexão.") from exc
+    _log_usage(s, kwargs["profile_id"], kwargs["purpose"], GROQ_MODEL_DEFAULT, resp, True)
+    s.info.update(ai_model=GROQ_MODEL_DEFAULT, ai_provider="groq")
+    return resp
+
+
+def _call(s: Session, **kwargs):
+    try:
+        resp = _call_gemini(s, **kwargs)
+        if hasattr(resp, "text") and not (resp.text or "").strip() and not getattr(resp, "function_calls", None):
+            raise GeminiUnavailable("O Gemini devolveu uma resposta vazia.")
+    except GeminiUnavailable as exc:
+        if not groq_api_key():
+            raise
+        logger.info("Gemini indisponível; tentando GroqCloud (%s)", kwargs["purpose"])
+        try:
+            return _call_groq(s, **kwargs)
+        except GeminiUnavailable as fallback_exc:
+            raise GeminiUnavailable(f"{exc} {fallback_exc}") from fallback_exc
+    s.info.update(ai_model=current_model(s), ai_provider="gemini")
+    return resp
+
+
 def generate_structured(s: Session, prompt: str, schema: type[T], *, purpose: str, profile_id: int | None,
                         validator=None, system: str = SYSTEM_BASE) -> T:
     """Gera JSON validado. `validator(obj) -> list[str]` devolve erros de negócio."""
@@ -121,8 +162,9 @@ def generate_structured(s: Session, prompt: str, schema: type[T], *, purpose: st
                                       response_schema=schema, temperature=0.4)
     errors: list[str] = []
     text = prompt
-    for attempt in range(2):
-        resp = _call(s, contents=text, config=cfg, purpose=purpose, profile_id=profile_id)
+    for attempt in range(4 if groq_api_key() else 2):
+        call = _call_groq if attempt >= 2 else _call
+        resp = call(s, contents=text, config=cfg, purpose=purpose, profile_id=profile_id)
         try:
             obj = resp.parsed if isinstance(resp.parsed, schema) else schema.model_validate_json(resp.text or "")
         except (ValidationError, ValueError) as exc:
@@ -134,7 +176,23 @@ def generate_structured(s: Session, prompt: str, schema: type[T], *, purpose: st
         logger.warning("Gemini %s: saída inválida (tentativa %s): %s", purpose, attempt + 1, errors[:5])
         text = (prompt + "\n\nSua resposta anterior foi rejeitada pela validação do sistema pelos motivos abaixo. "
                 "Corrija e responda novamente no mesmo formato:\n- " + "\n- ".join(errors[:15]))
-    raise GeminiInvalidOutput("O Gemini devolveu um plano inconsistente duas vezes; nada foi salvo.", errors)
+    raise GeminiInvalidOutput("A IA devolveu respostas inconsistentes; nada foi salvo.", errors)
+
+
+def generate_structured_from_image(s: Session, image: bytes, mime_type: str, prompt: str, schema: type[T], *,
+                                   purpose: str, profile_id: int | None) -> T:
+    """Leitura de foto com saída estruturada. Só no Gemini: o adaptador GroqCloud repassa apenas texto."""
+    from google.genai import types
+
+    cfg = types.GenerateContentConfig(system_instruction=SYSTEM_BASE, response_mime_type="application/json",
+                                      response_schema=schema, temperature=0.1)
+    contents = [types.Part.from_bytes(data=image, mime_type=mime_type), prompt]
+    resp = _call_gemini(s, contents=contents, config=cfg, purpose=purpose, profile_id=profile_id)
+    s.info.update(ai_model=current_model(s), ai_provider="gemini")
+    try:
+        return resp.parsed if isinstance(resp.parsed, schema) else schema.model_validate_json(resp.text or "")
+    except (ValidationError, ValueError) as exc:
+        raise GeminiInvalidOutput("A IA não devolveu a leitura no formato esperado.", [str(exc)[:300]]) from exc
 
 
 def generate_text(s: Session, prompt: str, *, purpose: str, profile_id: int | None, max_tokens: int = 700) -> str:
@@ -145,7 +203,7 @@ def generate_text(s: Session, prompt: str, *, purpose: str, profile_id: int | No
 
 
 def save_insight(s: Session, profile_id: int, kind: str, content: str) -> AIInsight:
-    ins = AIInsight(profile_id=profile_id, kind=kind, content=content, model=current_model(s))
+    ins = AIInsight(profile_id=profile_id, kind=kind, content=content, model=last_model(s))
     s.add(ins)
     s.flush()
     return ins
