@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 
 from components import ui
 from components.state import flash, require_profile
-from config.settings import ACCESS_CODE, gemini_api_key
+from config.settings import ACCESS_CODE, GROQ_MODEL_DEFAULT, gemini_api_key, groq_api_key
 from database.connection import session_scope
 from database.models import AIUsage, Setting
 from services import backup_service as bk
@@ -16,7 +16,9 @@ p = require_profile()
 ui.page_header("Configurações", "Gemini, backups, exportação e exclusão de dados.")
 
 with ui.panel("gemini"):
-    st.subheader("Gemini")
+    st.subheader("IA — Gemini com GroqCloud de reserva")
+    st.caption(f"Gemini é o padrão. Em caso de falha, tenta GroqCloud ({GROQ_MODEL_DEFAULT}). "
+               f"Chave GroqCloud: {'configurada' if groq_api_key() else 'ausente'}.")
     key = gemini_api_key()
     with session_scope() as s:
         model = gs.current_model(s)
@@ -43,7 +45,7 @@ with ui.panel("gemini"):
     if usage:
         st.dataframe(pd.DataFrame([{"uso": u[0], "chamadas": u[1], "tokens entrada": u[2] or 0, "tokens saída": u[3] or 0}
                                    for u in usage]), hide_index=True, width="stretch")
-    ui.note("O FitOS só chama o Gemini quando você clica em um botão de geração ou envia mensagem no chat. "
+    ui.note("O FitOS só chama a IA quando você clica em um botão de geração ou envia mensagem no chat. "
             "Gerador local de fichas e cardápios, cálculos, custos e listas não usam IA.")
 
 with ui.panel("acesso"):

@@ -109,3 +109,69 @@ def test_client_error_is_not_retried(s, monkeypatch):
     with pytest.raises(gs.GeminiUnavailable, match="cota"):
         gs._call(s, contents="p", config=None, purpose="t", profile_id=None)
     assert models.calls == 1
+
+
+@pytest.fixture(autouse=True)
+def no_live_groq(monkeypatch):
+    monkeypatch.setattr(gs, "groq_api_key", lambda: None)
+
+
+def test_gemini_failure_uses_groq(s, monkeypatch):
+    from types import SimpleNamespace
+    from services import groq_service
+    from database.models import AIUsage
+    from sqlalchemy import select
+    monkeypatch.setattr(gs, "groq_api_key", lambda: "test")
+    monkeypatch.setattr(gs, "client", lambda: (_ for _ in ()).throw(gs.GeminiUnavailable("offline")))
+    monkeypatch.setattr(groq_service, "generate_content", lambda **kw: SimpleNamespace(text="Olá", usage_metadata=None))
+    assert gs.generate_text(s, "oi", purpose="test", profile_id=None) == "Olá"
+    assert gs.last_provider(s) == "groq"
+    profile = ps.create_profile(s, "Fallback", 30, 80, 180)
+    assert gs.save_insight(s, profile.id, "test", "Olá").model == gs.GROQ_MODEL_DEFAULT
+    assert s.scalar(select(AIUsage).where(AIUsage.model == gs.GROQ_MODEL_DEFAULT)).ok
+
+
+def test_invalid_gemini_plan_uses_validated_groq(s, monkeypatch):
+    from types import SimpleNamespace
+    from services import groq_service
+    monkeypatch.setattr(gs, "groq_api_key", lambda: "test")
+    monkeypatch.setattr(gs, "_call", lambda *a, **kw: SimpleNamespace(parsed=None, text='{"days": []}'))
+    monkeypatch.setattr(groq_service, "generate_content", lambda **kw: SimpleNamespace(
+        parsed=None, text='{"days": [{"meals": []}]}', usage_metadata=None))
+    plan = gs.generate_structured(s, "p", gs.GMPlan, purpose="test", profile_id=None,
+                                  validator=lambda p: [] if p.days else ["faltam dias"])
+    assert len(plan.days) == 1
+    assert gs.last_provider(s) == "groq"
+
+
+def test_both_providers_fail(s, monkeypatch):
+    from services import groq_service
+    monkeypatch.setattr(gs, "groq_api_key", lambda: "test")
+    monkeypatch.setattr(gs, "client", lambda: (_ for _ in ()).throw(gs.GeminiUnavailable("offline")))
+    monkeypatch.setattr(groq_service, "generate_content", lambda **kw: (_ for _ in ()).throw(ValueError("secret")))
+    with pytest.raises(gs.GeminiUnavailable, match="GroqCloud também") as err:
+        gs.generate_text(s, "p", purpose="test", profile_id=None)
+    assert "secret" not in str(err.value)
+
+
+def test_groq_adapter_tools_and_usage(monkeypatch):
+    from services import groq_service as oa
+    from google.genai import types
+    import httpx
+    monkeypatch.setattr(oa, "groq_api_key", lambda: "test")
+    def handle(request):
+        import json
+        body = json.loads(request.content)
+        assert request.url.host == "api.groq.com"
+        assert any(t["function"]["name"] == "registrar_peso" for t in body["tools"])
+        assert body["messages"][1]["content"] == "registre 80 kg"
+        return httpx.Response(200, json={"choices": [{"finish_reason": "tool_calls", "message": {
+            "content": None, "tool_calls": [{"type": "function", "function": {
+                "name": "registrar_peso", "arguments": '{"peso_kg": 80}'}}]}}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5}})
+    real_client = httpx.Client
+    monkeypatch.setattr(oa.httpx, "Client", lambda **kw: real_client(transport=httpx.MockTransport(handle)))
+    resp = oa.generate_content(contents="registre 80 kg", config=types.GenerateContentConfig(tools=cs.tool_declarations()))
+    assert resp.function_calls[0].args == {"peso_kg": 80}
+    assert resp.usage_metadata.prompt_token_count == 10
+    assert resp.candidates[0].content.parts[0].function_call.name == "registrar_peso"

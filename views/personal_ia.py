@@ -14,7 +14,7 @@ ui.page_header("Meu personal IA", "Converse sobre treino, cardápio, compras e p
                "confirmação.")
 
 if not gs.is_configured():
-    st.warning("Configure GEMINI_API_KEY no arquivo .env para usar o chat.")
+    st.warning("Configure GEMINI_API_KEY ou GROQ_API_KEY no arquivo .env para usar o chat.")
     st.stop()
 
 with session_scope() as s:

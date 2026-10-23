@@ -78,7 +78,7 @@ def ai_workout_plan(s: Session, profile: Profile, extra_request: str = "") -> tu
     days = [ws.DraftDay(d.title, d.weekday, [ws.DraftExercise(by_id[e.exercise_id], e.sets, e.reps_min, e.reps_max,
                                                               e.rest_seconds, e.notes) for e in d.exercises])
             for d in plan.days]
-    saved = ws.save_plan(s, profile.id, plan.name or "Ficha Gemini", days, origin="gemini", rationale=plan.rationale)
+    saved = ws.save_plan(s, profile.id, plan.name or "Ficha IA", days, origin=gs.last_provider(s), rationale=plan.rationale)
     return saved, plan.rationale
 
 
@@ -167,9 +167,9 @@ def ai_meal_plan(s: Session, profile: Profile, days: int, target_kcal: float, ta
     menus = _to_drafts(plan.days, by_id)
     for day in menus:  # ajuste fino determinístico das porções às metas (o Python fecha a conta)
         ns.fit_portions(day, target_kcal, target_protein)
-    label = "econômico" if economic else "Gemini"
+    label = "econômico" if economic else gs.last_provider(s)
     return ns.save_plan(s, profile.id, f"Cardápio {ns.PLAN_LENGTHS.get(days, f'{days} dias')} ({label})", menus, days,
-                        people=people, start=date.today(), origin="gemini", target_kcal=target_kcal,
+                        people=people, start=date.today(), origin=gs.last_provider(s), target_kcal=target_kcal,
                         target_protein=target_protein, budget=budget,
                         notes=plan.notes or (f"{distinct} cardápios distintos repetidos em ciclo." if days > distinct else None))
 

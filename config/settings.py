@@ -32,6 +32,7 @@ def _db_url() -> str:
 
 DATABASE_URL = _db_url()
 GEMINI_MODEL_DEFAULT = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
+GROQ_MODEL_DEFAULT = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
 ACCESS_CODE = os.getenv("FITOS_ACCESS_CODE", "").strip()
 # Assina o cookie de sessão. Sem FITOS_SECRET, deriva do código da instalação (troque um ou outro para
 # encerrar todas as sessões abertas).
@@ -43,12 +44,17 @@ def gemini_api_key() -> str | None:
     return key or None
 
 
+def groq_api_key() -> str | None:
+    return os.getenv("GROQ_API_KEY", "").strip() or None
+
+
 class _SecretFilter(logging.Filter):
     """Remove a chave da API de qualquer mensagem de log."""
 
     def filter(self, record: logging.LogRecord) -> bool:
-        key = gemini_api_key()
-        if key:
+        for key in (gemini_api_key(), groq_api_key()):
+            if not key:
+                continue
             msg = record.getMessage()
             if key in msg:
                 record.msg = msg.replace(key, "***")
