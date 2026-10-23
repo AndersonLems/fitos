@@ -1,0 +1,122 @@
+[
+  {
+    "route": "/",
+    "size": "desktop",
+    "exceptions": 0,
+    "overflow": false
+  },
+  {
+    "route": "treinos",
+    "size": "desktop",
+    "exceptions": 0,
+    "overflow": false
+  },
+  {
+    "route": "biblioteca",
+    "size": "desktop",
+    "exceptions": 0,
+    "overflow": false
+  },
+  {
+    "route": "plano-alimentar",
+    "size": "desktop",
+    "exceptions": 0,
+    "overflow": false
+  },
+  {
+    "route": "mercado",
+    "size": "desktop",
+    "exceptions": 0,
+    "overflow": false
+  },
+  {
+    "route": "despensa",
+    "size": "desktop",
+    "exceptions": 0,
+    "overflow": false
+  },
+  {
+    "route": "evolucao",
+    "size": "desktop",
+    "exceptions": 0,
+    "overflow": false
+  },
+  {
+    "route": "personal-ia",
+    "size": "desktop",
+    "exceptions": 0,
+    "overflow": false
+  },
+  {
+    "route": "perfil",
+    "size": "desktop",
+    "exceptions": 0,
+    "overflow": false
+  },
+  {
+    "route": "configuracoes",
+    "size": "desktop",
+    "exceptions": 0,
+    "overflow": false
+  },
+  {
+    "route": "/",
+    "size": "mobile",
+    "exceptions": 0,
+    "overflow": false
+  },
+  {
+    "route": "treinos",
+    "size": "mobile",
+    "exceptions": 0,
+    "overflow": false
+  },
+  {
+    "route": "biblioteca",
+    "size": "mobile",
+    "exceptions": 0,
+    "overflow": false
+  },
+  {
+    "route": "plano-alimentar",
+    "size": "mobile",
+    "exceptions": 0,
+    "overflow": false
+  },
+  {
+    "route": "mercado",
+    "size": "mobile",
+    "exceptions": 0,
+    "overflow": false
+  },
+  {
+    "route": "despensa",
+    "size": "mobile",
+    "exceptions": 0,
+    "overflow": false
+  },
+  {
+    "route": "evolucao",
+    "size": "mobile",
+    "exceptions": 0,
+    "overflow": false
+  },
+  {
+    "route": "personal-ia",
+    "size": "mobile",
+    "exceptions": 0,
+    "overflow": false
+  },
+  {
+    "route": "perfil",
+    "size": "mobile",
+    "exceptions": 0,
+    "overflow": false
+  },
+  {
+    "route": "configuracoes",
+    "size": "mobile",
+    "exceptions": 0,
+    "overflow": false
+  }
+]
