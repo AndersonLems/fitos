@@ -61,3 +61,51 @@ def test_tool_declarations_cover_all_tools():
     names = {d.name for d in cs.tool_declarations()[0].function_declarations}
     assert {"gerar_treino", "substituir_exercicio", "registrar_treino", "gerar_cardapio", "substituir_alimento",
             "atualizar_preco", "gerar_lista_compras", "consultar_estoque", "registrar_peso"} <= names
+
+
+class _FakeModels:
+    def __init__(self, failures):
+        self.failures, self.calls = list(failures), 0
+
+    def generate_content(self, **kw):
+        self.calls += 1
+        if self.failures:
+            raise self.failures.pop(0)
+
+        class Resp:
+            usage_metadata = None
+        return Resp()
+
+
+def _api_error(cls, code, status):
+    return cls(code, {"error": {"code": code, "status": status, "message": "falha simulada"}})
+
+
+def _fake_client(monkeypatch, failures):
+    models = _FakeModels(failures)
+    monkeypatch.setattr(gs, "client", lambda: type("C", (), {"models": models})())
+    monkeypatch.setattr(gs, "RETRY_DELAYS", (0, 0))
+    return models
+
+
+def test_server_error_is_retried_then_succeeds(s, monkeypatch):
+    from google.genai import errors
+    models = _fake_client(monkeypatch, [_api_error(errors.ServerError, 503, "UNAVAILABLE")])
+    gs._call(s, contents="p", config=None, purpose="t", profile_id=None)
+    assert models.calls == 2
+
+
+def test_server_error_gives_up_with_clear_message(s, monkeypatch):
+    from google.genai import errors
+    models = _fake_client(monkeypatch, [_api_error(errors.ServerError, 503, "UNAVAILABLE")] * 3)
+    with pytest.raises(gs.GeminiUnavailable, match="sobrecarregado"):
+        gs._call(s, contents="p", config=None, purpose="t", profile_id=None)
+    assert models.calls == 3
+
+
+def test_client_error_is_not_retried(s, monkeypatch):
+    from google.genai import errors
+    models = _fake_client(monkeypatch, [_api_error(errors.ClientError, 429, "RESOURCE_EXHAUSTED")])
+    with pytest.raises(gs.GeminiUnavailable, match="cota"):
+        gs._call(s, contents="p", config=None, purpose="t", profile_id=None)
+    assert models.calls == 1
