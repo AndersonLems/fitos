@@ -7,6 +7,7 @@ from components import ui
 from database.connection import session_scope
 from database.models import Exercise, PlannedExercise
 from services import exercise_service as es
+from services import gemini_service as gs
 from services import workout_service as ws
 from services.catalog_data import SLOT_LABELS
 
@@ -45,10 +46,12 @@ def show_exercise(exercise_id: int, planned_id: int | None = None, profile_id: i
         if pe:
             pe.exercise  # noqa: B018 — carrega antes de fechar a sessão
         last = ws.last_sets(s, profile_id, exercise_id) if profile_id else []
-    exercise_detail(ex, pe, last)
+    exercise_detail(ex, pe, last, profile_id=profile_id, rerun="fragment")
 
 
-def exercise_detail(ex: Exercise, pe: PlannedExercise | None = None, last: list | None = None) -> None:
+def exercise_detail(ex: Exercise, pe: PlannedExercise | None = None, last: list | None = None, *,
+                    profile_id: int | None = None, rerun: str | None = "app") -> None:
+    """`rerun`: "fragment" dentro da janela, "app" numa página, None onde não cabe botão (formulário)."""
     name = es.display_name(ex)
     st.html(f'<div class="fx-day">{ui.esc(name)}</div>'
             + (f'<p class="fx-note">{ui.esc(ex.name_original)}</p>' if ex.name_pt else ""))
@@ -60,7 +63,7 @@ def exercise_detail(ex: Exercise, pe: PlannedExercise | None = None, last: list 
         if ex.gif_url or not ex.video_url:
             st.html(ui.media_html(ex.gif_url, f"Demonstração de {name}", "fx-thumb fx-demo"))
     with info:
-        chips = [es.BODY_PARTS_PT.get(ex.body_part, ex.body_part), ex.primary_muscle,
+        chips = [es.BODY_PARTS_PT.get(ex.body_part, ex.body_part), es.muscle_pt(ex.primary_muscle),
                  es.EQUIPMENT_PT.get(ex.equipment, ex.equipment), ex.difficulty, SLOT_LABELS.get(ex.slot)]
         st.html("".join(ui.chip(c) for c in chips if c))
         rows = []
@@ -72,17 +75,25 @@ def exercise_detail(ex: Exercise, pe: PlannedExercise | None = None, last: list 
             rows.append(("Última vez", ", ".join(f"{(r.load_kg or 0):g} kg × {r.reps}" for r in last if r.reps)
                          or "sem carga registrada"))
         if ex.secondary_muscles:
-            rows.append(("Músculos secundários", ", ".join(ex.secondary_muscles)))
+            rows.append(("Músculos secundários", ", ".join(es.muscle_pt(m) for m in ex.secondary_muscles)))
         if rows:
             st.html('<dl class="fx-facts">' + "".join(f"<dt>{ui.esc(k)}</dt><dd>{ui.esc(v)}</dd>" for k, v in rows)
                     + "</dl>")
         if ex.common_errors:
             st.html(f'<div class="fx-facts-t">Erros comuns</div><p class="fx-body">{ui.esc(ex.common_errors)}</p>')
             ui.note("Orientação geral do FitOS por padrão de movimento.")
-    if ex.instructions:
-        steps = [x.strip() for x in ex.instructions.split("\n") if x.strip()]
+    steps, translated = es.instructions_pt(ex)
+    if steps:
         st.html('<div class="fx-facts-t">Como executar</div><ol class="fx-steps">'
                 + "".join(f"<li>{ui.esc(x)}</li>" for x in steps) + "</ol>")
-        if not ex.name_pt or ex.source == "exercisedb":
-            ui.note("Instruções no idioma original da fonte.")
+        if not translated:
+            ui.note("Este exercício ainda não tem tradução; o texto acima é o original da fonte.")
+            if rerun and st.button("Traduzir com Gemini", key=f"traduzir-{ex.id}", icon=":material/translate:",
+                                   disabled=not gs.is_configured(), help="Uma chamada ao Gemini; a tradução fica salva."):
+                try:
+                    with ui.loading("Traduzindo…"), session_scope() as s:
+                        es.translate_with_gemini(s, ex.id, profile_id)
+                    st.rerun(scope=rerun)
+                except (gs.GeminiUnavailable, gs.GeminiInvalidOutput) as exc:
+                    st.error(str(exc))
     ui.note(f"Fonte: {ui.esc(ex.attribution or ex.media_source or ex.source)} · Licença: {ui.esc(ex.license or '—')}")

@@ -51,7 +51,7 @@ else:
     with session_scope() as s:
         last = ws.last_sets(s, p.id, ex.id)
     with right:
-        exercise_detail(ex, last=last)
+        exercise_detail(ex, last=last, profile_id=p.id)
 
 with st.expander("Atualizar catálogo a partir das fontes"):
     st.write("ExerciseDB: ~1.500 exercícios com GIF (sem chave, com limite de requisições; leva ~1–2 min). "

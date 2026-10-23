@@ -101,6 +101,7 @@ class Exercise(Base):
     equipment: Mapped[str | None] = mapped_column(String(60))
     difficulty: Mapped[str | None] = mapped_column(String(20))
     instructions: Mapped[str | None] = mapped_column(Text)
+    instructions_pt: Mapped[str | None] = mapped_column(Text)  # tradução feita a pedido (Gemini), um passo por linha
     common_errors: Mapped[str | None] = mapped_column(Text)
     gif_url: Mapped[str | None] = mapped_column(String(400))
     video_url: Mapped[str | None] = mapped_column(String(400))

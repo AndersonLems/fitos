@@ -127,7 +127,7 @@ with tab_hoje:
                 with c1:
                     st.html(ui.media_html(ex.gif_url, ex_name(ex)))
                     with st.popover("Execução", icon=":material/play_circle:", width="stretch"):
-                        exercise_detail(ex, pe)
+                        exercise_detail(ex, pe, rerun=None)  # dentro do formulário de séries
                 with c2:
                     presc = prescription_text(pe) if pe else "avulso"
                     st.markdown(f"**{ex_name(ex)}** — {presc}  \nÚltima vez: {last_txt}")

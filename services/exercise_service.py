@@ -1,10 +1,14 @@
 """Biblioteca local de exercícios e sincronização com as fontes externas."""
 from __future__ import annotations
 
+import json
+from functools import lru_cache
+
+from pydantic import BaseModel
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from config.settings import logger
+from config.settings import ASSETS_DIR, logger
 from database.models import Exercise
 from integrations import exercisedb, wger
 from integrations.base import IntegrationUnavailable
@@ -21,6 +25,25 @@ EQUIPMENT_PT = {
     "resistance band": "Elástico", "kettlebell": "Kettlebell", "ez bar": "Barra W", "stability ball": "Bola suíça",
     "weighted": "Peso corporal com carga", "assisted": "Máquina assistida", "medicine ball": "Medicine ball",
 }
+
+MUSCLES_PT = {
+    "abdominals": "abdômen", "abductors": "abdutores", "adductors": "adutores", "ankle stabilizers":
+    "estabilizadores do tornozelo", "ankles": "tornozelos", "back": "costas", "biceps": "bíceps", "brachialis":
+    "braquial", "calves": "panturrilhas", "cardiovascular system": "sistema cardiovascular", "core": "core",
+    "deltoids": "deltoides", "erector spinae": "eretores da coluna", "feet": "pés", "forearms": "antebraços",
+    "glutes": "glúteos", "grip muscles": "músculos da pegada", "hamstrings": "posteriores da coxa", "hands": "mãos",
+    "hip flexors": "flexores do quadril", "latissimus dorsi": "latíssimo do dorso (dorsal)", "levator scapulae":
+    "levantador da escápula", "obliques": "oblíquos", "pectorals": "peitoral", "quadriceps": "quadríceps",
+    "rear deltoids": "deltoide posterior", "rhomboids": "romboides", "rotator cuff": "manguito rotador",
+    "serratus anterior": "serrátil anterior", "soleus": "sóleo", "sternocleidomastoid": "esternocleidomastoideo",
+    "tibialis anterior": "tibial anterior", "trapezius": "trapézio", "triceps": "tríceps", "upper back":
+    "parte alta das costas", "wrist extensors": "extensores do punho", "wrist flexors": "flexores do punho",
+    "wrists": "punhos",
+}
+
+
+def muscle_pt(name: str | None) -> str | None:
+    return MUSCLES_PT.get(name.lower(), name) if name else name
 
 
 def search(s: Session, text: str = "", body_part: str | None = None, equipment: str | None = None,
@@ -48,6 +71,49 @@ def distinct_values(s: Session, column) -> list[str]:
 
 def display_name(e: Exercise) -> str:
     return e.name_pt or e.name_original
+
+
+@lru_cache(maxsize=1)
+def _pt_sentences() -> dict[str, str]:
+    """Tradução revisada, frase a frase, dos passos do ExerciseDB (cobre os exercícios principais)."""
+    return json.loads((ASSETS_DIR / "exercicios_pt.json").read_text())
+
+
+def _split(text: str | None) -> list[str]:
+    return [x.strip() for x in (text or "").split("\n") if x.strip()]
+
+
+def instructions_pt(e: Exercise) -> tuple[list[str], bool]:
+    """(passos, traduzido?). Ordem: tradução salva → dicionário local → texto original."""
+    if e.instructions_pt:
+        return _split(e.instructions_pt), True
+    steps = _split(e.instructions)
+    table = _pt_sentences()
+    if steps and all(x in table for x in steps):
+        return [table[x] for x in steps], True
+    return steps, False
+
+
+class _Steps(BaseModel):
+    steps: list[str]
+
+
+def translate_with_gemini(s: Session, exercise_id: int, profile_id: int | None) -> list[str]:
+    """Uma chamada ao Gemini, só a pedido; o resultado fica salvo no exercício."""
+    from services import gemini_service as gs
+
+    e = s.get(Exercise, exercise_id)
+    steps = _split(e.instructions)
+    if not steps:
+        return []
+    prompt = ("Traduza para o português do Brasil estes passos de execução de um exercício de musculação. Mantenha a "
+              "mesma quantidade e ordem de passos, linguagem de academia, frases curtas, sem acrescentar conteúdo.\n"
+              f"Exercício: {e.name_original}\n" + "\n".join(f"{i}. {x}" for i, x in enumerate(steps, 1)))
+    out = gs.generate_structured(s, prompt, _Steps, purpose="traducao", profile_id=profile_id,
+                                 validator=lambda o: [] if len(o.steps) == len(steps) and all(x.strip() for x in o.steps)
+                                 else [f"devolva exatamente {len(steps)} passos não vazios"])
+    e.instructions_pt = "\n".join(x.strip() for x in out.steps)
+    return out.steps
 
 
 def sync_exercisedb(s: Session) -> tuple[int, str]:
