@@ -19,7 +19,7 @@ from database.models import Profile
 # tabelas com profile_id direto
 PROFILE_TABLES = ["measurements", "workout_plans", "workout_sessions", "day_overrides", "meal_plans", "recipes",
                   "inventory_items", "shopping_lists", "purchases", "ai_conversations", "ai_insights", "ai_usage",
-                  "meal_logs", "monthly_budgets"]
+                  "meal_logs", "monthly_budgets", "goal_plans"]
 
 
 def db_path() -> Path:

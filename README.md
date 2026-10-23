@@ -31,10 +31,10 @@ e o catálogo de exercícios é baixado do ExerciseDB (~1–2 min, só uma vez; 
 | Painel | Peso, meta, IMC, calorias estimadas, consumo do dia, treinos da semana, custos e recomendações |
 | Meus treinos | Treino de hoje (com troca do dia), registro de séries, cronômetro, ficha, versões, progressão; “Ver execução” abre GIF, prescrição, passos e últimas cargas |
 | Biblioteca de exercícios | Busca, GIF/vídeo, instruções, erros comuns, fonte e licença |
-| Meu plano alimentar | Cardápios de 1/7/15/30/31 dias, macros e custos por refeição/dia, versão econômica, substituições |
+| Meu plano alimentar | Cardápios de 1/7/15/30/31 dias com 3 a 6 refeições, metas do cenário escolhido, macros e custos por refeição/dia, versão econômica, substituições |
 | Mercado inteligente | Escanear produto (código de barras ou etiqueta com IA), preços por estabelecimento, comparação, histórico, lista de compras com “quanto tenho para esta compra”, compra avulsa, custos, gastos e orçamento por mês |
 | Minha despensa | Estoque com validade; “O que posso preparar hoje?” e refeições de amanhã com o que há em casa |
-| Minha evolução | Peso com média móvel, medidas, fotos, frequência, cargas e análise opcional pelo Gemini |
+| Minha evolução | Prazo da meta (cenários conservador, mais rápido e intenso, com projeção e análise opcional da IA), peso com média móvel, medidas, fotos, frequência, cargas e análise de tendências |
 | Meu personal IA | Chat com ferramentas estruturadas; alterações só após confirmação |
 | Meu perfil | Dados obrigatórios e opcionais, estimativa energética, orçamento fixo, tema de cores (Lima, Oceano, Brasa), exclusão do perfil |
 | Configurações | Modelo Gemini, uso de tokens, backup, exportação CSV/JSON, exclusão de dados |
@@ -50,6 +50,7 @@ services/               regras de negócio — determinísticas, sem Streamlit
   pricing_service       cotações, normalização R$/kg|l|un, melhor preço, comparação
   shopping_service      consolidação, estoque, embalagens, totais, compras, compra avulsa
   budget_service        orçamento fixo do perfil com ajuste por mês
+  goal_service          prazo da meta de peso: cenários, revisão limitada da IA, metas diárias
   product_scan          código de barras (zxing-cpp), Open Food Facts, leitura de etiqueta pelo Gemini
   workout_service       fichas, versões, treino do dia, sessões, progressão conservadora
   gemini_service        cliente, saídas estruturadas (Pydantic), nova tentativa, uso de tokens
@@ -86,6 +87,17 @@ ficam salvas e só são refeitas quando você pede. O uso fica registrado em Con
   como comprado na lista da compra (ou numa compra avulsa, sem cardápio).
 - **Temas:** três temas escuros por perfil. Os widgets nativos do Streamlit vêm do `config.toml`; o tema troca
   acento e superfícies por CSS, então tabelas (desenhadas em canvas) mantêm o tom escuro padrão.
+
+### Prazo da meta de peso
+
+Em Minha evolução, o FitOS calcula três cenários até a meta pelo balanço energético (≈7.700 kcal/kg):
+**conservador** (0,5% do peso por semana), **mais rápido** (0,75%) e **intenso** (1%, limite superior usual);
+para ganho, superávit de 200/350/500 kcal. As calorias nunca ficam abaixo do piso (gasto basal estimado ou
+1.200/1.500 kcal) e a proteína sobe com o déficit. “Analisar com IA” faz uma chamada: a IA pode ajustar cada
+cenário em até ±150 kcal, escolher de 3 a 6 refeições, recomendar um cenário e escrever a análise comparando
+com a tendência registrada; o Python valida e recalcula prazos e macros. O cenário escolhido fica salvo e passa
+a ser a meta de calorias, proteína e refeições do cardápio (local e IA), da despensa, do Painel e do chat. A tela
+mostra a projeção, o peso esperado para hoje e pede recálculo após 4 semanas, mudança de meta ou de 3 kg.
 
 ## Fontes e decisões
 

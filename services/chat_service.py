@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from database.models import AIConversation, AIMessage, Exercise, Food, Profile
 from services import gemini_service as gs
+from services import goal_service
 from services import nutrition_service as ns
 from services import pricing_service as pr
 from services import profile_service as ps
@@ -176,6 +177,9 @@ def build_context(s: Session, p: Profile) -> str:
                      f"(itens sem preço: {len(sm.unpriced)})")
     else:
         lines.append("Sem cardápio ativo.")
+    goal = goal_service.context_line(goal_service.active(s, p.id))
+    if goal:
+        lines.append(goal)
     budget = budget_for(s, p)
     if budget:
         lines.append(f"Orçamento de alimentação deste mês: {fmt_brl(budget)}")
@@ -254,9 +258,9 @@ def prepare_write(s: Session, p: Profile, name: str, args: BaseModel) -> tuple[s
         a["exercise_id"] = ex.id
         return f"Registrar hoje: {ex.name_pt or ex.name_original}, {args.series}×{args.repeticoes} com {args.carga_kg:g} kg.", a
     if name == "gerar_cardapio":
-        e = ps.estimate_energy(p)
+        tg = goal_service.daily_targets(s, p)
         txt = f"Gerar cardápio de {args.dias} dia(s){' econômico' if args.economico else ''} (gerador local) com " \
-              f"meta de {e.target_kcal} kcal e {e.protein_g} g de proteína"
+              f"meta de {tg.kcal} kcal, {tg.protein_g} g de proteína e {tg.meals_per_day} refeições"
         if args.orcamento:
             txt += f", orçamento {fmt_brl(args.orcamento)}"
         return txt + ". O cardápio atual fica no histórico.", a
@@ -331,10 +335,10 @@ def execute_write(s: Session, p: Profile, name: str, a: dict) -> str:
                          load_kg=a["carga_kg"], reps=a["repeticoes"], completed=True))
         return f"{a['series']} série(s) registradas na sessão de hoje."
     if name == "gerar_cardapio":
-        e = ps.estimate_energy(p)
+        tg = goal_service.daily_targets(s, p)
         budget = Decimal(str(a["orcamento"])) if a.get("orcamento") else None
-        plan = ns.generate_local_plan(s, p, a["dias"], e.target_kcal, e.protein_g, people=p.people_count or 1,
-                                      economic=a["economico"], budget=budget)
+        plan = ns.generate_local_plan(s, p, a["dias"], tg.kcal, tg.protein_g, people=p.people_count or 1,
+                                      economic=a["economico"], budget=budget, meals=tg.meals_per_day)
         sm = ns.summarize(s, ns.load_plan(s, plan.id))
         return f"Cardápio '{plan.name}' criado. Custo calculado: {fmt_brl(sm.total_cost)}" + (
             f" ({len(sm.unpriced)} itens sem preço cadastrado)." if sm.unpriced else ".")

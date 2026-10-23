@@ -9,6 +9,7 @@ from components.exercise_view import exercise_list
 from components.state import require_profile
 from database.connection import session_scope
 from services import gemini_service as gs
+from services import goal_service
 from services import insights
 from services import profile_service as ps
 from services.ai_planner import ai_dashboard_recommendations
@@ -19,6 +20,8 @@ with session_scope() as s:
     f = insights.collect(s, p)
     weekly = insights.weekly_sessions(s, p.id)
     last_ai = gs.last_insight(s, p.id, "dashboard")
+    goal_sc = goal_service.chosen_scenario(goal_service.active(s, p.id))
+    tg = goal_service.daily_targets(s, p, f.weight)
 
 e = f.energy
 _hour = datetime.now().hour
@@ -95,11 +98,11 @@ with left:
 with right:
     with st.container(key="nutrition-panel"):
         st.markdown("**Alimentação de hoje**")
-        st.html(f'<div class="fx-val">{ui.fmt_num(cons.kcal)} <span style="font-size:14px;color:var(--muted)">/ {ui.fmt_num(e.target_kcal)} kcal</span></div>'
-                + ui.progress_html(cons.kcal, e.target_kcal, ui.INK))
-        for label, value, goal, color in [("Proteína",cons.protein,e.protein_g,ui.ACCENT),
-                                         ("Carboidratos",cons.carbs,e.carbs_g,ui.SERIES[1]),
-                                         ("Gorduras",cons.fat,e.fat_g,ui.SERIES[2])]:
+        st.html(f'<div class="fx-val">{ui.fmt_num(cons.kcal)} <span style="font-size:14px;color:var(--muted)">/ {ui.fmt_num(tg.kcal)} kcal</span></div>'
+                + ui.progress_html(cons.kcal, tg.kcal, ui.INK))
+        for label, value, goal, color in [("Proteína",cons.protein,tg.protein_g,ui.ACCENT),
+                                         ("Carboidratos",cons.carbs,tg.carbs_g,ui.SERIES[1]),
+                                         ("Gorduras",cons.fat,tg.fat_g,ui.SERIES[2])]:
             st.html(f'<div class="fx-macro"><span>{label}</span>{ui.progress_html(value, goal, color)}<span>{value:.0f}/{goal:.0f} g</span></div>')
         st.html('<div class="fx-eyebrow" style="margin-top:20px">Refeições</div>')
         day_index = (date.today() - meal_plan.start_date).days if meal_plan else -1
@@ -125,7 +128,8 @@ with right:
 budget = f.month_budget
 st.html('<div class="fx-grid">'
         + ui.tile_html({"label": "Peso corporal", "value": f"{ui.fmt_num(f.weight, 1)} kg", "detail": delta_txt,
-                        "foot": f"Meta {ui.fmt_num(target, 1)} kg" if target else "Meta não definida"})
+                        "foot": (f"Meta {ui.fmt_num(target, 1)} kg" + (f" até {goal_sc.date:%d/%m/%Y}" if goal_sc else ""))
+                        if target else "Meta não definida"})
         + ui.tile_html({"label": "Treinos nesta semana",
                         "value": f"{f.sessions_week} de {f.planned_week}" if f.planned_week else str(f.sessions_week)},
                        ui.week_strip_html(plan, {x.performed_on for x in finished}))
@@ -189,7 +193,7 @@ with c2, ui.panel("gemini"):
 with st.expander("Indicadores e estimativas"):
     ui.tiles([
         {"label":"IMC", "value":ui.fmt_num(bmi,1), "detail":ps.bmi_label(bmi)},
-        {"label":"Calorias estimadas/dia", "value":f"{ui.fmt_num(e.target_kcal)} kcal", "provisional":e.is_provisional},
+        {"label":"Calorias/dia" + ("" if tg.source == "estimativa" else f" ({tg.source.lower()})"), "value":f"{ui.fmt_num(tg.kcal)} kcal", "provisional":e.is_provisional and tg.source == "estimativa"},
         {"label":"Cardápio · custo por dia", "value":fmt_brl(f.plan_cost_daily) if f.plan_cost_daily is not None else "—",
          "detail":f"{f.plan_unpriced} itens sem preço" if f.plan_unpriced else ""},
     ])
@@ -200,7 +204,7 @@ with st.expander("Indicadores e estimativas"):
 with st.expander("Macronutrientes em detalhe"):
     fig = go.Figure()
     labels = ["Proteínas", "Carboidratos", "Gorduras"]
-    fig.add_bar(y=labels, x=[e.protein_g, e.carbs_g, e.fat_g], orientation="h", name="Meta",
+    fig.add_bar(y=labels, x=[tg.protein_g, tg.carbs_g, tg.fat_g], orientation="h", name="Meta",
                 marker=dict(color=ui.AXIS), hovertemplate="%{x:.0f} g<extra>meta</extra>")
     fig.add_bar(y=labels, x=[cons.protein, cons.carbs, cons.fat], orientation="h", name="Consumido hoje",
                 marker=dict(color=ui.SERIES[0]), width=0.3, hovertemplate="%{x:.0f} g<extra>consumido</extra>")

@@ -11,6 +11,7 @@ from database.connection import session_scope
 from database.models import Food, Profile, Recipe, RecipeIngredient, ShoppingItem, ShoppingList
 from services import ai_planner
 from services import gemini_service as gs
+from services import goal_service as gls
 from services import inventory_service as inv
 from services import nutrition_service as ns
 from services import profile_service as ps
@@ -22,6 +23,8 @@ p = require_profile()
 ui.page_header("Minha despensa", "O que já existe em casa. A lista de compras desconta este estoque (itens vencidos "
                "não contam) e a cozinha sugere o que dá para preparar com ele.")
 e = ps.estimate_energy(p)
+with session_scope() as _s:
+    tg = gls.daily_targets(_s, p)
 
 tab_est, tab_coz = st.tabs(["Estoque", "O que posso preparar hoje?"])
 
@@ -168,7 +171,7 @@ with tab_coz:
     c1, c2 = st.columns(2)
     with c1:
         if st.button("Montar refeições de amanhã (sem IA)", disabled=not usable):
-            menu = ns.local_menu(usable, 0, e.target_kcal, e.protein_g)
+            menu = ns.local_menu(usable, 0, tg.kcal, tg.protein_g, meals=tg.meals_per_day)
             st.session_state["coz_local"] = [(m.meal_type, m.preparation, [(i.food.id, i.grams) for i in m.items])
                                              for m in menu]
         if not usable:
@@ -177,8 +180,8 @@ with tab_coz:
         if st.button("Montar refeições de amanhã com Gemini", disabled=not (gs.is_configured() and stock)):
             try:
                 with ui.loading("Consultando o Gemini…"), session_scope() as s:
-                    menu, miss, nts = ai_planner.ai_tomorrow_from_stock(s, s.get(Profile, p.id), e.target_kcal,
-                                                                        e.protein_g)
+                    menu, miss, nts = ai_planner.ai_tomorrow_from_stock(s, s.get(Profile, p.id), tg.kcal,
+                                                                        tg.protein_g)
                 st.session_state["coz_local"] = [(m.meal_type, m.preparation, [(i.food.id, i.grams) for i in m.items])
                                                  for m in menu]
                 st.session_state["coz_notes"] = nts
@@ -206,7 +209,7 @@ with tab_coz:
         try:
             with ui.loading("Consultando o Gemini…"), session_scope() as s:
                 recs, _ = ai_planner.ai_recipes(s, s.get(Profile, p.id), ingredients, use_stock, max_minutes=minutes,
-                                                target_kcal=e.target_kcal, target_protein=e.protein_g)
+                                                target_kcal=tg.kcal, target_protein=tg.protein_g)
             st.session_state["receitas"] = [r.model_dump() for r in recs]
         except (gs.GeminiInvalidOutput, gs.GeminiUnavailable) as exc:
             st.error(str(exc))

@@ -7,6 +7,7 @@ import streamlit as st
 from sqlalchemy import select
 
 from components import ui
+from components.goal_view import goal_section
 from components.state import flash, require_profile
 from config.settings import PHOTO_DIR
 from database.connection import session_scope
@@ -63,6 +64,8 @@ with session_scope() as s:
     weekly = insights.weekly_sessions(s, p.id, 12)
     hist = ws.history_dataframe(s, p.id)
     last_ai = gs.last_insight(s, p.id, "evolucao")
+
+goal_section(p, w)
 
 if w.empty:
     st.info("Sem pesagens ainda.")

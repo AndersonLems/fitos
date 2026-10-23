@@ -11,6 +11,7 @@ from database.connection import session_scope
 from database.models import Meal, MealPlan, Profile
 from services import ai_planner
 from services import gemini_service as gs
+from services import goal_service as gls
 from services import nutrition_service as ns
 from services import profile_service as ps
 from services.pricing_service import price_per_gram_map
@@ -21,6 +22,8 @@ ui.page_header("Meu plano alimentar", "Cardápios de 1 a 31 dias. As refeições
                "ou pelo Gemini; calorias, macronutrientes e custos são sempre calculados pelo FitOS com a TACO e os "
                "seus preços.")
 e = ps.estimate_energy(p)
+with session_scope() as _s:
+    goal = gls.chosen_scenario(gls.active(_s, p.id))
 
 
 def generation_form(key: str) -> None:
@@ -30,13 +33,21 @@ def generation_form(key: str) -> None:
         people = c2.number_input("Pessoas", 1, 12, p.people_count or 1)
         mode = c3.radio("Quem propõe as refeições", ["Gerador local (sem IA)", "Gemini"], horizontal=False,
                         disabled=False)
-        c1, c2, c3 = st.columns(3)
-        kcal = c1.number_input("Meta diária (kcal por pessoa)", 1000, 5000, int(e.target_kcal), 50)
-        prot = c2.number_input("Proteína diária (g por pessoa)", 40, 300, int(e.protein_g), 5)
-        budget = c3.number_input("Orçamento do período (R$, opcional)", 0.0, 100000.0, None, 10.0, format="%.2f")
+        c1, c2, c3, c4 = st.columns([1.2, 1.2, 1, 1.4])
+        kcal = c1.number_input("Meta diária (kcal por pessoa)", 1000, 5000,
+                               int(goal.kcal if goal else e.target_kcal), 50)
+        prot = c2.number_input("Proteína diária (g por pessoa)", 40, 300, int(goal.protein_g if goal else e.protein_g), 5)
+        meals = c3.selectbox("Refeições por dia", list(ns.MEAL_SETS),
+                             index=list(ns.MEAL_SETS).index(goal.meals_per_day if goal else 4),
+                             help=" · ".join(f"{k}: {', '.join(v)}" for k, v in ns.MEAL_SETS.items()))
+        budget = c4.number_input("Orçamento do período (R$, opcional)", 0.0, 100000.0, None, 10.0, format="%.2f")
         economic = st.checkbox("Priorizar os alimentos mais baratos cadastrados")
         extra = st.text_input("Pedido para o Gemini (opcional)", placeholder="Ex.: refeições rápidas, sem peixe no jantar")
-        if e.is_provisional:
+        if goal:
+            ui.note(f"Metas do plano de meta ({ui.esc(goal.label.lower())}, até {goal.date:%d/%m/%Y}): "
+                    f"{goal.kcal} kcal, {goal.protein_g} g de proteína, {goal.meals_per_day} refeições. "
+                    "Mude o cenário em Minha evolução.")
+        elif e.is_provisional:
             ui.note("Metas pré-preenchidas com estimativa provisória (faltam: " + ", ".join(e.provisional) + ").")
         ok = st.form_submit_button("Gerar cardápio", type="primary")
     if ok:
@@ -46,9 +57,10 @@ def generation_form(key: str) -> None:
                 prof = s.get(Profile, p.id)
                 if mode == "Gemini":
                     plan = ai_planner.ai_meal_plan(s, prof, days, kcal, prot, people=people, economic=economic,
-                                                   budget=b, extra=extra)
+                                                   budget=b, extra=extra, meals=meals)
                 else:
-                    plan = ns.generate_local_plan(s, prof, days, kcal, prot, people=people, economic=economic, budget=b)
+                    plan = ns.generate_local_plan(s, prof, days, kcal, prot, people=people, economic=economic,
+                                                  budget=b, meals=meals)
             flash(f"Cardápio “{plan.name}” criado.")
             st.rerun()
         except gs.GeminiInvalidOutput as exc:

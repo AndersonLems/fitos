@@ -94,4 +94,37 @@ assert not app.exception, app.exception
 with session_scope() as s:
     assert s.get(Profile, pid).theme == 'brasa'
 assert app.session_state['tema'] == 'brasa'
+# Prazo da meta: cálculo local, escolha do cenário e análise (IA simulada, sem rede)
+from database.models import GoalPlan
+from services import gemini_service as gs_mod, goal_service as gls
+with session_scope() as s:
+    s.get(Profile, pid).target_weight_kg = 74
+app.switch_page('views/evolucao.py').run()
+next(b for b in app.button if b.label == 'Calcular prazos').click().run()
+assert not app.exception, app.exception
+with session_scope() as s:
+    gp = gls.active(s, pid)
+    assert gp and gp.chosen == 'conservador' and len(gp.scenarios) == 3
+next(r for r in app.radio if r.label == 'Cenário que vale para os cardápios').set_value('intenso').run()
+assert not app.exception, app.exception
+with session_scope() as s:
+    gp = gls.active(s, pid)
+    assert gp.chosen == 'intenso'
+    intenso = gls.chosen_scenario(gp)
+app.switch_page('views/plano_alimentar.py').run()
+assert not app.exception, app.exception
+assert any(n.value == intenso.kcal for n in app.number_input if n.label.startswith('Meta diária'))
+gs_mod.is_configured = lambda: True
+gs_mod.generate_structured = lambda *a, **k: gs_mod.GGoalReview(
+    analysis='Ritmo **moderado** é realista.', recommended='rapido',
+    scenarios=[gs_mod.GGoalScenario(key=k_, kcal_adjust=0, meals_per_day=5, tips='Dica.') for k_ in gls.KEYS])
+app.switch_page('views/evolucao.py').run()
+next(b for b in app.button if b.label == 'Analisar com IA').click().run()
+assert not app.exception, app.exception
+with session_scope() as s:
+    gp = gls.active(s, pid)
+    assert gp.chosen == 'rapido' and gp.analysis.startswith('Ritmo') and gls.chosen_scenario(gp).meals_per_day == 5
+    assert s.query(GoalPlan).filter(GoalPlan.profile_id == pid).count() == 2
+app.switch_page('views/dashboard.py').run()
+assert not app.exception, app.exception
 print('All ten pages and workout/meal persistence passed.')

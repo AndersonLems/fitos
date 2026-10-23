@@ -278,3 +278,17 @@ class GRecipe(BaseModel):
 
 class GRecipes(BaseModel):
     recipes: list[GRecipe]
+
+
+class GGoalScenario(BaseModel):
+    key: str = Field(description="conservador | rapido | intenso")
+    kcal_adjust: int = Field(description="ajuste nas calorias diárias calculadas, entre -150 e 150 (0 se ok)")
+    meals_per_day: int = Field(ge=3, le=6)
+    tips: str = Field(description="1–2 frases práticas para seguir este cenário")
+
+
+class GGoalReview(BaseModel):
+    analysis: str = Field(description="análise curta em markdown (até 8 linhas): o que os dados mostram, "
+                                      "o que é realista e quando reavaliar")
+    recommended: str = Field(description="conservador | rapido | intenso")
+    scenarios: list[GGoalScenario]

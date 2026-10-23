@@ -508,6 +508,26 @@ class AIUsage(TimestampMixin, Base):
     ok: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
+class GoalPlan(TimestampMixin, Base):
+    """Prazos para a meta de peso: três cenários calculados (e, a pedido, revisados pela IA).
+
+    O cenário escolhido define as calorias, os macros e o número de refeições dos próximos cardápios.
+    """
+    __tablename__ = "goal_plans"
+    __table_args__ = (Index("ix_goal_plans_profile", "profile_id", "is_active"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    profile_id: Mapped[int] = mapped_column(ForeignKey("profiles.id", ondelete="CASCADE"))
+    start_weight_kg: Mapped[float] = mapped_column(Float)
+    target_weight_kg: Mapped[float] = mapped_column(Float)
+    tdee_kcal: Mapped[float] = mapped_column(Float)
+    scenarios: Mapped[list] = mapped_column(JSON)  # [{key, label, kcal, protein_g, …, target_date}]
+    chosen: Mapped[str] = mapped_column(String(20))
+    analysis: Mapped[str | None] = mapped_column(Text)
+    origin: Mapped[str] = mapped_column(String(20), default="local")  # local | gemini | groq
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
 class Setting(Base):
     __tablename__ = "settings"
 

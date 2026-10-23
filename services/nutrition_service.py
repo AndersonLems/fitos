@@ -199,6 +199,15 @@ TEMPLATES = {
     "Lanche": [("fruta", 120, "fixed"), ("laticinio", 170, "protein"), ("carbo_lanche", 30, "carb")],
     "Jantar": [("tuberculo", 150, "carb"), ("proteina", 120, "protein"), ("vegetal", 100, "fixed"),
                ("gordura", 5, "fixed")],
+    "Lanche da manhã": [("fruta", 100, "fixed"), ("laticinio", 170, "protein")],
+    "Ceia": [("laticinio", 170, "protein"), ("carbo_lanche", 20, "carb")],
+}
+# refeições do dia conforme a quantidade escolhida (o plano de meta sugere 3–6)
+MEAL_SETS = {
+    3: ["Café da manhã", "Almoço", "Jantar"],
+    4: ["Café da manhã", "Almoço", "Lanche", "Jantar"],
+    5: ["Café da manhã", "Lanche da manhã", "Almoço", "Lanche", "Jantar"],
+    6: ["Café da manhã", "Lanche da manhã", "Almoço", "Lanche", "Jantar", "Ceia"],
 }
 SLOT_RULES = {
     "carbo_cafe": lambda f: f.group == "pao" or f.taco_id in (7, 533),
@@ -297,14 +306,18 @@ PREP = {
               "temperos naturais; legumes no vapor; finalizar a salada com o azeite.",
     "Lanche": "Misturar o iogurte/leite com a fruta picada e a aveia ou servir separado.",
     "Jantar": "Cozinhar o tubérculo em água ou no vapor; proteína grelhada ou assada; legumes no vapor.",
+    "Lanche da manhã": "Fruta com o iogurte ou o leite.",
+    "Ceia": "Iogurte ou leite com a aveia, cerca de 1 h antes de dormir.",
 }
 
 
 def local_menu(foods: list[Food], day_index: int, target_kcal: float, target_protein: float, *,
-               economic: bool = False, prices: dict[int, QuoteView] | None = None) -> list[DraftMeal]:
+               economic: bool = False, prices: dict[int, QuoteView] | None = None,
+               meals: int = 4) -> list[DraftMeal]:
     prices = prices or {}
     day: list[DraftMeal] = []
-    for mi, (meal_type, slots) in enumerate(TEMPLATES.items()):
+    for mi, meal_type in enumerate(MEAL_SETS[meals]):
+        slots = TEMPLATES[meal_type]
         items = []
         used: set[int] = set()
         for si, (slot, grams, role) in enumerate(slots):
@@ -344,13 +357,13 @@ def save_plan(s: Session, profile_id: int, name: str, days_menus: list[list[Draf
 
 def generate_local_plan(s: Session, profile: Profile, days: int, target_kcal: float, target_protein: float, *,
                         people: int = 1, economic: bool = False, start: date | None = None,
-                        budget: Decimal | None = None) -> MealPlan:
+                        budget: Decimal | None = None, meals: int = 4) -> MealPlan:
     foods = core_foods(s)
     excl = excluded_food_ids(foods, profile)
     foods = [f for f in foods if f.id not in excl]
     prices = price_per_gram_map(s)
     distinct = min(days, 7)
-    menus = [local_menu(foods, d, target_kcal, target_protein, economic=economic, prices=prices)
+    menus = [local_menu(foods, d, target_kcal, target_protein, economic=economic, prices=prices, meals=meals)
              for d in range(distinct)]
     label = "econômico" if economic else "padrão"
     return save_plan(s, profile.id, f"Cardápio {PLAN_LENGTHS.get(days, f'{days} dias')} ({label})", menus, days,

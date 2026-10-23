@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from database.models import Exercise, Food, Profile
 from services import gemini_service as gs
+from services import goal_service
 from services import nutrition_service as ns
 from services import workout_service as ws
 from services.inventory_service import list_items
@@ -101,11 +102,15 @@ def _food_catalog(s: Session, profile: Profile, only_ids: set[int] | None = None
 ROLE_BY_GROUP = {"proteina": "protein", "ovo": "protein", "cereal": "carb", "tuberculo": "carb", "pao": "carb"}
 
 
-def _menu_validator(valid: set[int], days_expected: int, target_kcal: float, target_protein: float):
+def _menu_validator(valid: set[int], days_expected: int, target_kcal: float, target_protein: float,
+                    meals: int | None = None):
     def validate(plan: gs.GMPlan) -> list[str]:
         errs = []
         if len(plan.days) != days_expected:
             errs.append(f"esperados {days_expected} dias, vieram {len(plan.days)}")
+        if meals:
+            errs += [f"dia {i + 1}: esperadas {meals} refeições, vieram {len(d.meals)}"
+                     for i, d in enumerate(plan.days) if len(d.meals) != meals]
         return errs + _check_days(plan.days, valid, target_kcal, target_protein)
     return validate
 
@@ -141,8 +146,14 @@ def _to_drafts(days: list, by_id: dict[int, Food]) -> list[list[ns.DraftMeal]]:
     return out
 
 
+def _goal_txt(s: Session, profile: Profile) -> str:
+    line = goal_service.context_line(goal_service.active(s, profile.id))
+    return f"{line}\n" if line else ""
+
+
 def ai_meal_plan(s: Session, profile: Profile, days: int, target_kcal: float, target_protein: float, *,
-                 people: int = 1, economic: bool = False, budget: Decimal | None = None, extra: str = ""):
+                 people: int = 1, economic: bool = False, budget: Decimal | None = None, extra: str = "",
+                 meals: int = 4):
     foods, rows = _food_catalog(s, profile)
     by_id = {f.id: f for f in foods}
     _FOODS_CACHE.update(by_id)
@@ -154,16 +165,19 @@ def ai_meal_plan(s: Session, profile: Profile, days: int, target_kcal: float, ta
         f"Crie {distinct} cardápios diários distintos (serão repetidos em ciclo até {days} dias).\n"
         f"PERFIL: {gs.compact(profile_brief(profile))}\n"
         f"METAS DIÁRIAS POR PESSOA: {target_kcal:.0f} kcal, {target_protein:.0f} g de proteína.\n"
-        f"CATÁLOGO [food_id, nome, grupo, kcal/100g, proteína/100g, custo R$/100g ou null se sem preço]: "
+        + _goal_txt(s, profile)
+        + f"CATÁLOGO [food_id, nome, grupo, kcal/100g, proteína/100g, custo R$/100g ou null se sem preço]: "
         f"{gs.compact(rows)}\n"
         "Regras: use SOMENTE food_id do catálogo; gramas no estado indicado no nome (cozido/cru/pronto); "
-        "4 refeições (Café da manhã, Almoço, Lanche, Jantar); preparo simples em 1–2 frases; comida brasileira "
+        f"{meals} refeições por dia ({', '.join(ns.MEAL_SETS[meals])}), nesses nomes e nessa ordem; "
+        "distribua a proteína entre elas; preparo simples em 1–2 frases; comida brasileira "
         "do dia a dia; respeite restrições e alergias. "
         + ("Priorize os alimentos de menor custo com preço conhecido, mantendo as metas. " if economic else "")
         + budget_txt + (f"Pedido do usuário: {extra[:300]}" if extra else "")
     )
     plan = gs.generate_structured(s, prompt, gs.GMPlan, purpose="cardapio", profile_id=profile.id,
-                                  validator=_menu_validator(set(by_id), distinct, target_kcal, target_protein))
+                                  validator=_menu_validator(set(by_id), distinct, target_kcal, target_protein,
+                                                            meals))
     menus = _to_drafts(plan.days, by_id)
     for day in menus:  # ajuste fino determinístico das porções às metas (o Python fecha a conta)
         ns.fit_portions(day, target_kcal, target_protein)
@@ -184,13 +198,20 @@ def ai_economic_version(s: Session, profile: Profile, plan, budget: Decimal | No
              f"Cardápio atual [refeição, [[food_id, gramas]]]: {gs.compact(current)}. Troque os itens caros por "
              "equivalentes mais baratos com preço conhecido, sem presumir que o mais barato tem o mesmo valor "
              "nutricional: ajuste as gramas para manter proteína e energia.")
+    meals = len(next(iter(summary.days.values()), [])) or 4
     new = ai_meal_plan(s, profile, plan.days, plan.target_kcal or 2000, plan.target_protein_g or 100,
-                       people=plan.people, economic=True, budget=budget, extra=extra)
+                       people=plan.people, economic=True, budget=budget, extra=extra,
+                       meals=meals if meals in ns.MEAL_SETS else 4)
     new.parent_id = plan.id
     return new
 
 
 # --------------------------------------------------------------------------- cozinha
+
+def _meals(s: Session, profile: Profile) -> int:
+    sc = goal_service.chosen_scenario(goal_service.active(s, profile.id))
+    return sc.meals_per_day if sc else 4
+
 
 def ai_recipes(s: Session, profile: Profile, ingredients_text: str, use_stock: bool, *, max_minutes: int | None,
                target_kcal: float | None, target_protein: float | None) -> tuple[list[gs.GRecipe], dict[int, Food]]:
@@ -209,7 +230,8 @@ def ai_recipes(s: Session, profile: Profile, ingredients_text: str, use_stock: b
         + (f"INGREDIENTES INFORMADOS: {ingredients_text[:400]}\n" if ingredients_text else "")
         + f"CATÁLOGO [food_id, nome, grupo, kcal/100g, prot/100g, custo]: {gs.compact(rows)}\n"
         + (f"Tempo máximo de preparo: {max_minutes} min. " if max_minutes else "")
-        + (f"Referência por refeição: ~{target_kcal / 4:.0f} kcal e ~{target_protein / 4:.0f} g de proteína. "
+        + (f"Referência por refeição: ~{target_kcal / _meals(s, profile):.0f} kcal e "
+           f"~{target_protein / _meals(s, profile):.0f} g de proteína. "
            if target_kcal and target_protein else "")
         + "Use SOMENTE food_id do catálogo nos itens; o que faltar em casa vai em 'missing' (nome e gramas)."
     )
@@ -229,6 +251,8 @@ def ai_recipes(s: Session, profile: Profile, ingredients_text: str, use_stock: b
 
 
 def ai_tomorrow_from_stock(s: Session, profile: Profile, target_kcal: float, target_protein: float):
+    sc = goal_service.chosen_scenario(goal_service.active(s, profile.id))
+    meals = sc.meals_per_day if sc else 4
     items = list_items(s, profile.id)
     stock_ids = {i.food_id for i in items}
     foods, rows = _food_catalog(s, profile)
@@ -236,7 +260,8 @@ def ai_tomorrow_from_stock(s: Session, profile: Profile, target_kcal: float, tar
     _FOODS_CACHE.update(by_id)
     stock_txt = "; ".join(f"{i.food.short_name or i.food.name} [id {i.food_id}] {i.quantity:g} {i.unit}" for i in items)
     prompt = (
-        "Monte as 4 refeições de amanhã usando APENAS o que há no estoque, respeitando as quantidades.\n"
+        f"Monte as {meals} refeições de amanhã ({', '.join(ns.MEAL_SETS[meals])}) usando APENAS o que há no "
+        "estoque, respeitando as quantidades.\n"
         f"PERFIL: {gs.compact(profile_brief(profile))}\nMETAS: {target_kcal:.0f} kcal, {target_protein:.0f} g proteína.\n"
         f"ESTOQUE: {stock_txt or 'vazio'}\nCATÁLOGO: {gs.compact(rows)}\n"
         "Se faltar algo essencial, use o alimento do catálogo mesmo assim e cite-o em notes como compra complementar."
@@ -285,3 +310,40 @@ def tomorrow() -> date:
 
 def exercise_name(e: Exercise) -> str:
     return e.name_pt or e.name_original
+
+
+# --------------------------------------------------------------------------- meta de peso
+
+def ai_goal_review(s: Session, profile: Profile, weight: float, base: list, trend: dict):
+    """A IA revisa os três cenários calculados (dentro dos limites) e escreve a análise do prazo."""
+    rows = [{"key": x.key, "kcal": x.kcal, "proteina_g": x.protein_g, "gordura_g": x.fat_g,
+             "carboidratos_g": x.carbs_g, "refeicoes": x.meals_per_day, "kg_semana": x.weekly_kg,
+             "semanas": x.weeks, "data_meta": x.target_date} for x in base]
+    prompt = (
+        "Avalie o prazo para a meta de peso deste perfil. O sistema calculou três cenários pelo balanço "
+        "energético; revise cada um.\n"
+        f"PERFIL: {gs.compact(profile_brief(profile))}\n"
+        f"PESO ATUAL: {weight:g} kg · META: {profile.target_weight_kg:g} kg\n"
+        f"TENDÊNCIA REGISTRADA: {gs.compact(trend)}\n"
+        f"CENÁRIOS CALCULADOS: {gs.compact(rows)}\n"
+        "Regras: kcal_adjust entre -150 e 150 (use 0 se o cálculo estiver adequado); nunca proponha ficar abaixo do "
+        "piso já aplicado; meals_per_day entre 3 e 6 conforme rotina, treino e preferências; recommended é o cenário "
+        "mais adequado considerando experiência, limitações e a tendência real. Na análise compare a tendência "
+        "registrada com os ritmos, diga o que é realista e lembre de reavaliar a cada 4 semanas. Sem promessas."
+    )
+
+    def validate(r: gs.GGoalReview) -> list[str]:
+        errs = [] if r.recommended in goal_service.KEYS else [f"recommended inválido: {r.recommended}"]
+        keys = [x.key for x in r.scenarios]
+        if sorted(keys) != sorted(goal_service.KEYS):
+            errs.append(f"envie exatamente os cenários {goal_service.KEYS}, vieram {keys}")
+        return errs
+
+    review = gs.generate_structured(s, prompt, gs.GGoalReview, purpose="meta_peso", profile_id=profile.id,
+                                    validator=validate)
+    scenarios, rejected = goal_service.apply_review(profile, weight, base, review)
+    analysis = review.analysis.strip()
+    if rejected:
+        analysis += "\n\n_Ajustes limitados pelo FitOS: " + "; ".join(rejected) + "._"
+    return goal_service.save(s, profile, weight, scenarios, chosen=review.recommended, analysis=analysis,
+                             origin=gs.last_provider(s))
