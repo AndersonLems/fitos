@@ -11,7 +11,7 @@ from services import gemini_service as gs
 p = require_profile()
 ui.page_header("Meu personal IA", "Converse sobre treino, cardápio, compras e preços. O assistente conhece seu perfil, "
                "a ficha, o cardápio, a despensa e os preços; quando propõe uma alteração, nada muda sem a sua "
-               "confirmação.", kicker="Gemini")
+               "confirmação.")
 
 if not gs.is_configured():
     st.warning("Configure GEMINI_API_KEY no arquivo .env para usar o chat.")
@@ -82,7 +82,7 @@ if prompt:
     with st.chat_message("user"):
         st.markdown(prompt)
     try:
-        with st.spinner("Pensando…"), session_scope() as s:
+        with ui.loading("Pensando…"), session_scope() as s:
             conv = cs.get_or_create_conversation(s, p.id, st.session_state.get("conv_id"))
             if not conv.messages:
                 conv.title = prompt[:60]

@@ -18,7 +18,13 @@ from services.ai_planner import ai_trend_analysis
 
 p = require_profile()
 ui.page_header("Minha evolução", "Peso, medidas, frequência de treino e cargas ao longo do tempo. A média móvel "
-               "suaviza a variação diária de água e conteúdo intestinal.", kicker=p.name)
+               "suaviza a variação diária de água e conteúdo intestinal.")
+
+def _avg_table(series: pd.Series, label: str, fmt: str) -> pd.DataFrame:
+    diff = series.diff()
+    return pd.DataFrame({label: series.index.strftime(fmt), "média (kg)": [ui.fmt_num(v, 1) for v in series],
+                         "variação": ["—" if pd.isna(v) else f"{v:+.1f}".replace(".", ",") for v in diff]}).iloc[::-1]
+
 
 FIELDS = [("weight_kg", "Peso (kg)"), ("abdomen_cm", "Abdômen (cm)"), ("waist_cm", "Cintura (cm)"),
           ("arm_cm", "Braço (cm)"), ("chest_cm", "Peito (cm)"), ("hip_cm", "Quadril (cm)"), ("thigh_cm", "Coxa (cm)")]
@@ -62,13 +68,13 @@ if w.empty:
     st.info("Sem pesagens ainda.")
 else:
     fig = go.Figure()
-    fig.add_scatter(x=w["data"], y=w["peso"], mode="markers", name="Pesagens",
-                    marker=dict(size=8, color=ui.SERIES[1], line=dict(width=2, color=ui.SURFACE)))
-    fig.add_scatter(x=w["data"], y=w["media7"], mode="lines", name="Média móvel 7 dias",
-                    line=dict(width=2, color=ui.SERIES[0]))
+    fig.add_scatter(x=w["data"], y=w["peso"], mode="markers", name="Pesagens", marker=dict(color=ui.SERIES[1]),
+                    hovertemplate="%{y:.1f} kg<extra>pesagem</extra>")
+    fig.add_scatter(x=w["data"], y=w["media7"], mode="lines", name="Média móvel 7 dias", line=dict(color=ui.SERIES[0]),
+                    hovertemplate="%{y:.1f} kg<extra>média 7d</extra>")
     if p.target_weight_kg:
         fig.add_hline(y=p.target_weight_kg, line=dict(color=ui.MUTED, width=1, dash="dot"), annotation_text="meta",
-                      annotation_font_color=ui.MUTED)
+                      annotation_position="top left", annotation_font_color=ui.MUTED)
     fig.update_yaxes(ticksuffix=" kg")
     ui.plot(ui.date_axis(ui.fig_layout(fig, "Peso", 340)))
 
@@ -78,41 +84,43 @@ else:
     c1, c2 = st.columns(2)
     with c1:
         st.markdown("**Média semanal**")
-        st.dataframe(pd.DataFrame({"semana de": wk.index.strftime("%d/%m/%Y"), "média (kg)": wk.round(1).values,
-                                   "variação": wk.diff().round(2).values}).iloc[::-1],
-                     hide_index=True, width="stretch")
+        st.dataframe(_avg_table(wk, "semana de", "%d/%m/%Y"), hide_index=True, width="stretch", height=min(318, 35 * len(wk) + 38))
     with c2:
         st.markdown("**Média mensal**")
-        st.dataframe(pd.DataFrame({"mês": mo.index.strftime("%m/%Y"), "média (kg)": mo.round(1).values,
-                                   "variação": mo.diff().round(2).values}).iloc[::-1],
-                     hide_index=True, width="stretch")
+        st.dataframe(_avg_table(mo, "mês", "%m/%Y"), hide_index=True, width="stretch")
 
 mdf = pd.DataFrame([{"data": m.measured_on, **{label: getattr(m, k) for k, label in FIELDS[1:]}} for m in ms])
 present = [label for _, label in FIELDS[1:] if not mdf.empty and mdf[label].notna().any()]
 if present:
     st.markdown("**Medidas**")
-    sel = st.multiselect("Mostrar", present, present[:3])
+    sel = st.multiselect("Mostrar", present, present[:3], max_selections=len(ui.SERIES))
+    # Medidas de escalas diferentes (cintura × braço) ficam comparáveis pela variação desde a primeira.
     fig = go.Figure()
-    for i, label in enumerate(sel):
+    for label in sel:
         g = mdf[["data", label]].dropna()
-        fig.add_scatter(x=g["data"], y=g[label], name=label.replace(" (cm)", ""), mode="lines+markers",
-                        line=dict(width=2, color=ui.SERIES[i % len(ui.SERIES)]), marker=dict(size=8))
-    fig.update_yaxes(ticksuffix=" cm")
-    ui.plot(ui.date_axis(ui.fig_layout(fig, "Medidas corporais", 300)))
+        color = ui.SERIES[present.index(label) % len(ui.SERIES)]
+        fig.add_scatter(x=g["data"], y=g[label] - g[label].iloc[0], name=label.replace(" (cm)", ""),
+                        mode="lines+markers", line=dict(color=color), marker=dict(color=color),
+                        customdata=g[label], hovertemplate="%{customdata:.1f} cm (%{y:+.1f})<extra>" + label + "</extra>")
+    fig.add_hline(y=0, line=dict(color=ui.AXIS, width=1))
+    fig.update_yaxes(ticksuffix=" cm", tickformat="+.1f")
+    ui.plot(ui.date_axis(ui.fig_layout(fig, "Medidas corporais", 300, caption="Variação em relação à primeira medição")))
     rows = []
     for label in present:
         g = mdf[["data", label]].dropna()
-        rows.append({"medida": label, "primeira": g[label].iloc[0], "última": g[label].iloc[-1],
-                     "mudança": round(g[label].iloc[-1] - g[label].iloc[0], 1),
+        rows.append({"medida": label, "primeira": ui.fmt_num(g[label].iloc[0], 1),
+                     "última": ui.fmt_num(g[label].iloc[-1], 1),
+                     "mudança": f"{g[label].iloc[-1] - g[label].iloc[0]:+.1f}".replace(".", ","),
                      "período": f"{ui.fmt_date(g['data'].iloc[0])} → {ui.fmt_date(g['data'].iloc[-1])}"})
     st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
 
 c1, c2 = st.columns(2)
 with c1:
     fig = go.Figure()
-    fig.add_bar(x=weekly["semana"], y=weekly["treinos"], name="Treinos", marker=dict(color=ui.SERIES[0], line=dict(width=0)))
+    fig.add_bar(x=weekly["semana"], y=weekly["treinos"], name="Treinos", marker=dict(color=ui.SERIES[0]),
+                hovertemplate="%{y} treino(s)<extra>semana de %{x|%d/%m}</extra>")
     ui.date_axis(fig)
-    fig.update_yaxes(dtick=1)
+    fig.update_yaxes(dtick=1, rangemode="tozero")
     ui.plot(ui.fig_layout(fig, "Frequência de treinos (12 semanas)", 280))
 with c2:
     if hist.empty:
@@ -124,9 +132,10 @@ with c2:
         for i, ex in enumerate(top):
             g = done[done["exercicio"] == ex].groupby("data")["carga"].max().reset_index()
             fig.add_scatter(x=g["data"], y=g["carga"], name=ex, mode="lines+markers",
-                            line=dict(width=2, color=ui.SERIES[i]), marker=dict(size=8))
+                            line=dict(color=ui.SERIES[i]), marker=dict(color=ui.SERIES[i]))
         fig.update_yaxes(ticksuffix=" kg")
-        ui.plot(ui.date_axis(ui.fig_layout(fig, "Carga máxima — exercícios mais frequentes", 280)))
+        fig.update_layout(legend=dict(entrywidth=0.5, entrywidthmode="fraction"))
+        ui.plot(ui.date_axis(ui.fig_layout(fig, "Carga máxima", 280, caption="Os 4 exercícios mais registrados")))
 
 photos = [m for m in ms if m.photo_path]
 if photos:
@@ -158,7 +167,7 @@ if st.button("Gerar nova análise", disabled=not gs.is_configured() or w.empty):
              "cargas": (hist[hist["concluida"]].groupby("exercicio")["carga"].agg(["first", "last"]).reset_index()
                         .head(10).values.tolist() if not hist.empty else [])}
     try:
-        with st.spinner("Consultando o Gemini…"), session_scope() as s:
+        with ui.loading("Consultando o Gemini…"), session_scope() as s:
             ai_trend_analysis(s, s.get(Profile, p.id), facts)
         st.rerun()
     except gs.GeminiUnavailable as exc:

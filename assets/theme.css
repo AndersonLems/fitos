@@ -1,0 +1,935 @@
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap");
+
+/* ------------------------------------------------------------------ tokens
+   Uma superfície de cartão, um raio, um espaçamento. Os blocos do Streamlit
+   já separam elementos com 1rem (16px); cartões não somam margem própria. */
+:root {
+  --page: #0b0d10;
+  --surface: #14181e;
+  --chip: #1b2027;
+  --ink: #f3f5f7;
+  --ink-2: #a4adb9;
+  --muted: #737d8a;
+  --border: #2a3039;
+  --line: #ffffff10;
+  --acento: #b5f24a;
+  --warn: #e4b568;
+  --bad: #df7770;
+  --radius: 14px;
+  --pad: 20px;
+  --gap: 16px;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+body,
+.stApp {
+  font-family: Geist, system-ui, sans-serif;
+  color: var(--ink);
+  background: var(--page);
+}
+h1,
+h2,
+h3,
+.fx-val,
+.fx-day {
+  font-family: "Space Grotesk", sans-serif !important;
+  letter-spacing: -0.02em;
+  font-weight: 600 !important;
+}
+
+/* ------------------------------------------------------------------ casca */
+.block-container {
+  max-width: 1180px;
+  padding: 4.8rem 2rem 4rem;
+}
+[data-testid="stHeader"] {
+  background: transparent;
+  border: 0;
+  pointer-events: none;
+}
+[data-testid="stHeader"] button {
+  pointer-events: auto;
+}
+[data-testid="stSidebar"] {
+  background: var(--page);
+  border-right: 1px solid var(--line);
+  min-width: 230px !important;
+  width: 230px !important;
+}
+[data-testid="stSidebarUserContent"] {
+  padding: 0 12px 24px !important;
+}
+[data-testid="stSidebarNav"] {
+  padding: 0 !important;
+}
+[data-testid="stSidebarNav"] ul {
+  padding: 0;
+}
+[data-testid="stSidebarNav"] li {
+  margin: 0;
+}
+[data-testid="stSidebarNav"] a {
+  font-size: 13px;
+  border-radius: 6px;
+  min-height: 32px;
+  color: var(--ink-2);
+}
+[data-testid="stSidebarNav"] a[aria-current="page"] {
+  background: var(--chip);
+  color: var(--ink);
+}
+[data-testid="stSidebarNav"] a[aria-current="page"] span[data-testid="stIconMaterial"] {
+  color: var(--acento);
+}
+[data-testid="stSidebarNav"] header {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.fx-topbar {
+  position: fixed;
+  top: 0;
+  left: 230px;
+  right: 0;
+  height: 56px;
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 32px;
+  font-size: 12px;
+  color: var(--muted);
+  background: #0b0d10ed;
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+.fx-topbar > span:first-child {
+  margin-right: auto;
+}
+.fx-topbar strong {
+  color: var(--ink-2);
+  font-weight: 400;
+}
+.fx-topbar a {
+  color: var(--ink-2);
+  text-decoration: none;
+}
+.fx-mobile-nav {
+  display: none;
+}
+
+/* ------------------------------------------------------------------ cabeçalho de página */
+.fx-head {
+  margin: 0 0 8px;
+  animation: page-in 160ms var(--ease) both;
+}
+.fx-head h1 {
+  font-size: 28px;
+  margin: 0;
+  padding: 0;
+  line-height: 1.25;
+}
+.fx-head p {
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ink-2);
+  margin: 6px 0 0;
+  max-width: 72ch;
+}
+.fx-kicker,
+.fx-eyebrow {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+/* ------------------------------------------------------------------ cartões
+   .fx-card / .fx-tile (HTML), contêineres com borda, formulários, expansores e
+   os cartões de gráfico compartilham superfície, borda, raio e recuo. */
+.fx-tile,
+.fx-card,
+[data-testid="stMetric"],
+[data-testid="stForm"],
+[class*="st-key-card-"],
+.stVerticalBlock:has(> .stElementContainer .fx-chart-head) {
+  background: var(--surface);
+  border: 1px solid var(--line) !important;
+  border-radius: var(--radius) !important;
+}
+[class*="st-key-card-"],
+.stVerticalBlock:has(> .stElementContainer .fx-chart-head) {
+  padding: var(--pad) !important;
+  gap: 12px;
+}
+.fx-card {
+  padding: var(--pad);
+  margin: 0;
+  height: 100%;
+  box-sizing: border-box;
+}
+.fx-card h3,
+.fx-chart-head h3 {
+  font-size: 15px;
+  line-height: 1.3;
+  margin: 0;
+  padding: 0;
+}
+.fx-card h3 + * {
+  margin-top: 12px;
+}
+.fx-card p {
+  font-size: 14px;
+  color: var(--ink-2);
+}
+.fx-card > :last-child {
+  margin-bottom: 0;
+}
+[data-testid="stForm"] {
+  padding: var(--pad);
+}
+[data-testid="stExpander"] details {
+  border-radius: 10px;
+  border-color: var(--line);
+  background: var(--surface);
+}
+
+/* Os subtítulos dentro de cartões seguem o tamanho dos títulos de cartão. */
+[class*="st-key-card-"] h3,
+[data-testid="stForm"] h3 {
+  font-size: 15px !important;
+  line-height: 1.3 !important;
+  padding: 0 0 4px !important;
+}
+[data-testid="stForm"] .stElementContainer:not(:first-child) h3 {
+  padding-top: 16px !important;
+}
+[data-testid="stHeadingWithActionElements"] h3 {
+  font-size: 17px;
+}
+
+/* Colunas lado a lado: o cartão único de cada coluna estica até a mais alta. */
+.stColumn > .stVerticalBlock > [data-testid="stLayoutWrapper"]:only-child {
+  flex: 1 1 auto;
+}
+.stColumn > .stVerticalBlock > [data-testid="stLayoutWrapper"]:only-child > .stVerticalBlock {
+  height: 100%;
+}
+
+/* ------------------------------------------------------------------ grade de indicadores */
+.fx-tiles,
+.fx-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--gap);
+  align-items: stretch;
+}
+.fx-grid {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+.fx-tile {
+  padding: 18px var(--pad);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.fx-rot {
+  font-size: 12px;
+  color: var(--ink-2);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
+}
+.fx-val {
+  font-size: 26px;
+  line-height: 1.3;
+  margin-top: 6px;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fx-det {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.fx-det b {
+  color: var(--acento);
+  font-weight: 500;
+}
+.fx-tile .fx-foot {
+  margin-top: auto;
+  padding-top: 12px;
+}
+.fx-tile.acento .fx-val {
+  color: var(--acento);
+}
+
+/* ------------------------------------------------------------------ texto auxiliar */
+.fx-note {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+  margin: 0;
+}
+.fx-note a {
+  color: var(--ink-2);
+}
+.fx-list {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  padding-left: 18px;
+  margin: 12px 0;
+}
+.fx-list li + li {
+  margin-top: 8px;
+}
+.fx-chip,
+.fx-prov {
+  display: inline-flex;
+  align-items: center;
+  background: var(--chip);
+  padding: 3px 8px;
+  border-radius: 5px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ink-2);
+  margin: 0 4px 4px 0;
+}
+.fx-prov {
+  margin: 0;
+}
+.fx-chip.ok {
+  background: #b5f24a1f;
+  color: var(--acento);
+}
+.fx-chip.warn,
+.fx-prov {
+  background: #e4b5681f;
+  color: var(--warn);
+}
+.fx-chip.bad {
+  background: #df77701f;
+  color: var(--bad);
+}
+.fx-day {
+  font-size: 24px;
+  margin: 0 0 6px;
+}
+.fx-meal-head h3 {
+  font-size: 15px;
+  margin: 0;
+  padding: 0;
+}
+.fx-meal-head p {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 2px 0 0;
+}
+.fx-meal {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+.fx-meal b {
+  font-size: 14px;
+}
+.fx-meal span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ------------------------------------------------------------------ gráficos */
+.stElementContainer:has(> .stHtml > .fx-chart-head:empty) {
+  display: none;
+}
+.fx-chart-head p {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 4px 0 0;
+}
+[data-testid="stPlotlyChart"] {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+/* ------------------------------------------------------------------ treino */
+.fx-ex {
+  display: grid;
+  grid-template-columns: 16px 44px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+}
+/* Linha de exercício: HTML à esquerda, botão “Ver execução” à direita. */
+[class*="st-key-exrow-"] {
+  border-top: 1px solid var(--line);
+  padding: 10px 0;
+}
+[class*="st-key-exrow-"] [data-testid="stHorizontalBlock"] {
+  flex-wrap: nowrap !important;
+}
+[class*="st-key-exrow-"] [data-testid="stColumn"]:last-child {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  min-width: 0 !important;
+}
+[class*="st-key-exrow-"] [data-testid="stColumn"]:first-child {
+  min-width: 0 !important;
+}
+.fx-ex-t {
+  font-size: 14px;
+}
+.fx-ex-d {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+.fx-ex-number {
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.fx-sets {
+  display: flex;
+  gap: 4px;
+}
+.fx-sets i {
+  width: 16px;
+  height: 6px;
+  border-radius: 4px;
+  background: #29313c;
+}
+.fx-sets i.done {
+  background: var(--acento);
+}
+.fx-statline {
+  display: flex;
+  gap: 32px;
+  margin: 4px 0;
+}
+.fx-statline p {
+  margin: 0;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+.fx-statline small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 2px;
+}
+.fx-week {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin: 16px 0 0;
+}
+.fx-week div {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.fx-week b {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px dashed var(--border);
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 400;
+}
+.fx-week .planned {
+  border-style: solid;
+  color: var(--ink-2);
+}
+.fx-week .today {
+  border: 1px solid var(--acento);
+  color: var(--acento);
+}
+.fx-week .done {
+  background: var(--acento);
+  color: var(--page);
+  border-color: var(--acento);
+}
+
+/* Painel principal: cartão do treino e de alimentação com a mesma altura. */
+.st-key-workout-hero,
+.st-key-nutrition-panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 24px !important;
+  gap: 12px !important;
+  height: 100%;
+}
+.st-key-workout-hero {
+  background: radial-gradient(ellipse at top right, #b5f24a0f, transparent 55%), var(--surface);
+}
+.st-key-workout-hero [data-testid="stHtml"]:has(> .fx-eyebrow) {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.st-key-workout-hero .fx-eyebrow,
+.st-key-workout-hero .fx-chip {
+  margin: 0;
+}
+.st-key-workout-hero h2 {
+  margin: 0 !important;
+  line-height: 1.2 !important;
+}
+.st-key-workout-hero .fx-ex {
+  grid-template-columns: 16px 36px minmax(0, 1fr) auto;
+}
+.st-key-workout-hero .fx-thumb-sm {
+  width: 36px;
+}
+.st-key-nutrition-panel .fx-val {
+  font-size: 32px;
+}
+.st-key-nutrition-panel > :last-child {
+  margin-top: auto;
+}
+.st-key-nutrition-panel [class*="st-key-meal-row-"] {
+  gap: 0 !important;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.st-key-nutrition-panel [data-testid="stCheckbox"] label p {
+  font-size: 13px;
+}
+.st-key-nutrition-panel [data-testid="stCheckbox"] label > span {
+  border-radius: 50%;
+}
+.st-key-nutrition-panel [data-testid="stCaptionContainer"] p {
+  font-size: 12px;
+  padding-left: 25px;
+}
+.fx-track {
+  height: 5px;
+  border-radius: 9px;
+  background: var(--chip);
+  overflow: hidden;
+  margin: 10px 0;
+}
+.fx-track > span {
+  display: block;
+  height: 100%;
+  border-radius: 9px;
+  transition: width 450ms var(--ease);
+}
+.fx-macro {
+  display: grid;
+  grid-template-columns: 85px 1fr 75px;
+  gap: 10px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.fx-macro .fx-track {
+  height: 4px;
+}
+.fx-macro > span:last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Janela de detalhe do exercício */
+.fx-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 16px;
+  margin: 12px 0 0 !important;
+  padding: 0 !important;
+  font-size: 13px;
+}
+.fx-facts dt {
+  color: var(--muted);
+}
+.fx-facts dd {
+  margin: 0 !important;
+  color: var(--ink);
+}
+.fx-facts-t {
+  font-family: "Space Grotesk", sans-serif;
+  font-weight: 600;
+  font-size: 15px;
+  margin: 8px 0 6px;
+}
+.fx-body {
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ink-2);
+  margin: 0;
+}
+.fx-steps {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink-2);
+  padding-left: 20px;
+  margin: 0;
+  max-width: 75ch;
+}
+.fx-steps li + li {
+  margin-top: 6px;
+}
+.fx-demo {
+  max-width: 420px;
+}
+
+/* ------------------------------------------------------------------ entrada e perfil */
+.st-key-login {
+  max-width: 480px;
+  margin: 4vh auto 0;
+}
+.fx-me span {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+.fx-me strong {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* ------------------------------------------------------------------ biblioteca */
+.st-key-library-grid [data-testid="stLayoutWrapper"] > .stVerticalBlock {
+  height: 100%;
+  gap: 10px;
+}
+.fx-thumb {
+  aspect-ratio: 1;
+  width: 100%;
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+.fx-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.fx-thumb {
+  position: relative;
+}
+.fx-thumb::before {
+  content: attr(data-vazio);
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 8px;
+  background: var(--chip);
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+}
+.fx-thumb img {
+  position: relative;
+  color: transparent;
+  font-size: 0;
+}
+.fx-demo {
+  border-radius: 10px;
+}
+.fx-thumb-sm {
+  width: 44px;
+  border-radius: 8px;
+}
+.fx-thumb-sm::before {
+  content: "";
+}
+
+/* ------------------------------------------------------------------ despensa */
+.fx-inventory-row {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr 1fr;
+  gap: 16px;
+  align-items: center;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.fx-inventory-row.fx-eyebrow {
+  padding-top: 0;
+  margin: 0;
+}
+.fx-inventory-row strong {
+  font-weight: 500;
+}
+.fx-inventory-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+/* ------------------------------------------------------------------ perfil */
+.fx-profile {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 0;
+}
+.fx-profile > span {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--chip);
+  font-size: 18px;
+  font-family: "Space Grotesk", sans-serif;
+}
+.fx-profile p {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 4px 0;
+}
+
+/* ------------------------------------------------------------------ controles nativos */
+button {
+  transition:
+    background 140ms var(--ease),
+    border-color 140ms var(--ease),
+    transform 140ms var(--ease) !important;
+}
+button:active {
+  transform: scale(0.98);
+}
+button[kind="primary"] {
+  color: #203019;
+  font-weight: 600;
+}
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--acento);
+  outline-offset: 3px;
+}
+.stTabs [data-baseweb="tab-list"] {
+  gap: 4px;
+  border-bottom: 1px solid var(--line);
+}
+.stTabs [data-baseweb="tab"] {
+  font-size: 13px;
+  padding: 8px 14px;
+}
+.stTabs [aria-selected="true"] {
+  color: var(--ink);
+  background: var(--chip);
+  border-radius: 6px 6px 0 0;
+}
+[data-testid="stMetric"] {
+  padding: 16px;
+}
+[data-testid="stMetricValue"] {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 26px;
+}
+[data-testid="stChatMessage"] {
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+}
+[data-testid="stAlert"] {
+  border-radius: 10px;
+  font-size: 13px;
+}
+[data-testid="stAlert"] p {
+  font-size: 13px;
+}
+[data-testid="stAlert"]:has([data-testid="stAlertContentSuccess"]),
+[data-testid="stCheckbox"]:has(input:checked) {
+  animation: flash-ok 900ms var(--ease);
+}
+
+/* ------------------------------------------------------------------ carregamento */
+.fx-loading-line {
+  height: 2px;
+  background: var(--chip);
+  overflow: hidden;
+  border-radius: 2px;
+}
+.fx-loading-line:after,
+[data-testid="stSpinner"]:before {
+  content: "";
+  display: block;
+  width: 30%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--acento) 70%, transparent);
+  animation: indeterminate 2.5s ease-in-out infinite alternate;
+}
+.fx-loading p {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.fx-skeleton {
+  height: 44px;
+  background: var(--chip);
+  position: relative;
+  overflow: hidden;
+  border-radius: 6px;
+  margin: 12px 0;
+}
+.fx-skeleton:after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, #ffffff0d, transparent);
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+[data-testid="stSpinner"] {
+  width: 100%;
+  border-top: 2px solid var(--chip);
+  position: relative;
+  padding-top: 12px;
+}
+[data-testid="stSpinner"]:before {
+  position: absolute;
+  top: -2px;
+}
+
+.fx-icon {
+  width: 20px !important;
+  height: 20px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  object-fit: contain !important;
+}
+
+@keyframes indeterminate {
+  from { transform: translateX(-10%); }
+  to { transform: translateX(240%); }
+}
+@keyframes shimmer {
+  to { transform: translateX(100%); }
+}
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes flash-ok {
+  from { background: #b5f24a1f; }
+  to { background: transparent; }
+}
+
+/* ------------------------------------------------------------------ celular */
+@media (max-width: 900px) {
+  .block-container {
+    padding: 4.8rem 1rem 6rem;
+  }
+  .fx-head h1 {
+    font-size: 24px;
+  }
+  .fx-topbar {
+    left: 110px;
+    padding: 0 14px;
+    font-size: 11px;
+    gap: 8px;
+  }
+  .fx-topbar > span:first-child {
+    font-size: 0;
+  }
+  .fx-topbar > span:first-child strong {
+    font-size: 11px;
+  }
+  .fx-topbar > a,
+  .fx-topbar .fx-top-date {
+    display: none;
+  }
+  .fx-mobile-nav {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 999;
+    background: #0b0d10f5;
+    border-top: 1px solid var(--line);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .fx-mobile-nav a {
+    display: grid;
+    justify-items: center;
+    gap: 5px;
+    padding: 12px 2px;
+    color: var(--muted);
+    font-size: 10px;
+    text-decoration: none;
+  }
+  .fx-mobile-nav a[aria-current="page"] {
+    color: var(--acento);
+  }
+  .fx-mobile-nav .fx-icon {
+    margin: auto;
+  }
+  .fx-mobile-nav a[aria-current="page"] .fx-icon {
+    filter: sepia(1) saturate(5) hue-rotate(25deg);
+  }
+  [data-testid="stHorizontalBlock"] {
+    flex-wrap: wrap;
+  }
+  [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+    min-width: min(100%, 300px);
+    flex: 1 1 300px;
+  }
+  .st-key-library-grid [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+    min-width: 0;
+    flex: 1 1 140px;
+  }
+  .st-key-workout-hero,
+  .st-key-nutrition-panel {
+    padding: 18px !important;
+  }
+  .fx-tiles {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+  }
+  .fx-val {
+    font-size: 22px;
+  }
+  .fx-tile {
+    padding: 14px;
+  }
+  .fx-ex,
+  .st-key-workout-hero .fx-ex {
+    grid-template-columns: 16px 36px minmax(0, 1fr);
+  }
+  .fx-thumb-sm {
+    width: 36px;
+  }
+  /* no celular o botão fica só com o ícone; o nome do exercício ao lado já identifica a linha */
+  [class*="st-key-ver-"] button p {
+    display: none;
+  }
+  .fx-sets {
+    display: none;
+  }
+}
+@media (max-width: 600px) {
+  .fx-inventory-row {
+    grid-template-columns: 1.4fr 1fr;
+    gap: 8px;
+  }
+  .fx-inventory-row > span:last-child {
+    grid-column: 1/-1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *:before,
+  *:after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}

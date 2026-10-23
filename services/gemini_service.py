@@ -9,6 +9,7 @@ Princípios:
 from __future__ import annotations
 
 import json
+import time
 from typing import TypeVar
 
 from pydantic import BaseModel, Field, ValidationError
@@ -68,17 +69,45 @@ def _log_usage(s: Session, profile_id: int | None, purpose: str, model: str, res
                   output_tokens=getattr(um, "candidates_token_count", None)))
 
 
+# Erros 5xx são do lado do Google (sobrecarga, falha interna) e não cobram tokens: vale tentar de novo.
+RETRY_DELAYS = (2, 6)
+
+
+def _failure_message(exc: Exception, model: str) -> str:
+    code = getattr(exc, "code", None)
+    if code == 503:
+        return (f"O Gemini está sobrecarregado agora (503) e não respondeu após {len(RETRY_DELAYS) + 1} tentativas. "
+                "Tente de novo em alguns minutos ou escolha outro modelo em Configurações.")
+    if isinstance(code, int) and code >= 500:
+        return (f"O Gemini teve um erro interno ({code}) após {len(RETRY_DELAYS) + 1} tentativas. Tente de novo "
+                "em alguns minutos ou escolha outro modelo em Configurações.")
+    if code == 429:
+        return "A cota do Gemini acabou (429). Aguarde a renovação ou use um modelo “lite” em Configurações."
+    if code in (401, 403):
+        return f"O Gemini recusou a chave ({code}). Confira GEMINI_API_KEY no arquivo .env."
+    if code == 404:
+        return f"O modelo “{model}” não foi encontrado (404). Escolha outro em Configurações."
+    return (f"Falha ao chamar o Gemini ({type(exc).__name__}{f' {code}' if code else ''}). "
+            "Verifique a conexão, a chave e o modelo em Configurações.")
+
+
 def _call(s: Session, *, contents, config, purpose: str, profile_id: int | None):
     model = current_model(s)
-    try:
-        resp = client().models.generate_content(model=model, contents=contents, config=config)
-    except GeminiUnavailable:
-        raise
-    except Exception as exc:  # erros de rede/cota: registra sem expor a chave
-        logger.error("Gemini falhou (%s, %s): %s", purpose, model, type(exc).__name__)
-        _log_usage(s, profile_id, purpose, model, None, False)
-        raise GeminiUnavailable(f"Falha ao chamar o Gemini ({type(exc).__name__}). Verifique a chave, a cota e o "
-                                f"modelo em Configurações.") from exc
+    for attempt in range(len(RETRY_DELAYS) + 1):
+        try:
+            resp = client().models.generate_content(model=model, contents=contents, config=config)
+            break
+        except GeminiUnavailable:
+            raise
+        except Exception as exc:  # erros de rede/cota: registra sem expor a chave
+            code = getattr(exc, "code", None)
+            logger.error("Gemini falhou (%s, %s, tentativa %s): %s %s %s", purpose, model, attempt + 1,
+                         type(exc).__name__, code or "", str(getattr(exc, "message", "") or "")[:200])
+            if isinstance(code, int) and code >= 500 and attempt < len(RETRY_DELAYS):
+                time.sleep(RETRY_DELAYS[attempt])
+                continue
+            _log_usage(s, profile_id, purpose, model, None, False)
+            raise GeminiUnavailable(_failure_message(exc, model)) from exc
     _log_usage(s, profile_id, purpose, model, resp, True)
     return resp
 

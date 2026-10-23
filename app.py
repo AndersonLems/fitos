@@ -7,8 +7,8 @@ st.set_page_config(page_title="FitOS", page_icon="assets/icone.svg", layout="wid
                    initial_sidebar_state="auto")
 
 from components import ui  # noqa: E402
-from components.auth import gate  # noqa: E402
-from components.state import current_profile_id, remember_profile_cookie, set_profile, show_flash  # noqa: E402
+from components import auth  # noqa: E402
+from components.state import show_flash  # noqa: E402
 from config.settings import logger  # noqa: E402
 from database.connection import run_migrations, session_scope  # noqa: E402
 from services import profile_service as ps  # noqa: E402
@@ -30,80 +30,46 @@ def bootstrap() -> dict:
 
 ui.inject_css()
 bootstrap()
-gate()
 
+pages = {
+    "": [st.Page("views/dashboard.py", title="Hoje", icon=":material/dashboard:", default=True)],
+    "Treino": [st.Page("views/treinos.py", title="Meus treinos", icon=":material/fitness_center:", url_path="treinos"),
+               st.Page("views/biblioteca.py", title="Biblioteca", icon=":material/exercise:", url_path="biblioteca")],
+    "Nutrição": [st.Page("views/plano_alimentar.py", title="Plano alimentar", icon=":material/restaurant:", url_path="plano-alimentar"),
+                    st.Page("views/mercado.py", title="Mercado inteligente", icon=":material/shopping_cart:", url_path="mercado"),
+                    st.Page("views/despensa.py", title="Minha despensa", icon=":material/inventory_2:", url_path="despensa")],
+    "Acompanhamento": [st.Page("views/evolucao.py", title="Minha evolução", icon=":material/show_chart:", url_path="evolucao"),
+             st.Page("views/personal_ia.py", title="Personal IA", icon=":material/auto_awesome:", url_path="personal-ia")],
 
-def onboarding() -> None:
-    ui.page_header("Comece pelo básico", "Idade, peso e altura bastam para criar o perfil. Os demais dados "
-                   "(objetivo, atividade, dias de treino, restrições…) podem ser preenchidos depois em Meu Perfil; "
-                   "até lá, as estimativas aparecem marcadas como provisórias.", kicker="Novo perfil")
-    with st.form("onboarding"):
-        name = st.text_input("Nome do perfil", placeholder="Ex.: Anderson")
-        c1, c2, c3 = st.columns(3)
-        age = c1.number_input("Idade (anos)", 12, 100, value=None, step=1)
-        weight = c2.number_input("Peso atual (kg)", 30.0, 300.0, value=None, step=0.1, format="%.1f")
-        height = c3.number_input("Altura (cm)", 120.0, 230.0, value=None, step=0.5, format="%.1f")
-        ok = st.form_submit_button("Criar perfil", type="primary")
-    if ok:
-        if None in (age, weight, height) or not name.strip():
-            st.error("Preencha nome, idade, peso e altura.")
-            return
-        try:
-            with session_scope() as s:
-                p = ps.create_profile(s, name, age, weight, height)
-                pid = p.id
-        except ValueError as exc:
-            st.error(str(exc))
-            return
-        set_profile(pid)
-        st.session_state.pop("_novo_perfil", None)
-        st.rerun()
-
+    "Conta": [st.Page("views/perfil.py", title="Meu perfil", icon=":material/person:", url_path="perfil"),
+             st.Page("views/configuracoes.py", title="Configurações", icon=":material/settings:", url_path="configuracoes")],
+}
 
 with session_scope() as _s:
-    profiles = [(p.id, p.name) for p in ps.list_profiles(_s)]
+    profiles = ps.list_profiles(_s)
 
-pid = current_profile_id()
-if pid not in {p[0] for p in profiles}:
-    pid = profiles[0][0] if profiles else None
-    set_profile(pid)
+pid = auth.authenticated_profile(profiles)
+if pid is None:
+    # A navegação é registrada (oculta) para o endereço pedido continuar válido depois da entrada.
+    st.navigation(pages, position="hidden")
+    auth.login_screen(profiles)
+    st.stop()
+me = next(p for p in profiles if p.id == pid)
 
 st.logo("assets/logo.svg", size="large", icon_image="assets/icone.svg")
 with st.sidebar:
-    if profiles:
-        ids = [p[0] for p in profiles]
-        names = dict(profiles)
-        sel = st.selectbox("Perfil", ids, index=ids.index(pid), format_func=lambda i: names[i])
-        if sel != pid:
-            set_profile(sel)
-            st.rerun()
-        if st.button("Novo perfil", width="stretch"):
-            st.session_state["_novo_perfil"] = True
-            st.rerun()
-
-if not profiles or st.session_state.get("_novo_perfil"):
-    if profiles and st.button("Cancelar"):
-        st.session_state.pop("_novo_perfil", None)
+    st.html(f'<div class="fx-me"><span>Perfil</span><strong>{ui.esc(me.name)}</strong></div>')
+    if me.access_hash is None:
+        st.caption("Sem código próprio ainda. Defina um em Meu perfil.")
+    if st.button("Sair", key="sair", width="stretch", icon=":material/logout:", help="Voltar à tela de entrada para trocar de perfil"):
+        auth.logout()
         st.rerun()
-    onboarding()
-    st.stop()
 
 show_flash()
-remember_profile_cookie()
 
-pages = {
-    "": [st.Page("views/dashboard.py", title="Painel", default=True)],
-    "Treino": [st.Page("views/treinos.py", title="Meus treinos", url_path="treinos"),
-               st.Page("views/biblioteca.py", title="Biblioteca de exercícios", url_path="biblioteca")],
-    "Alimentação": [st.Page("views/plano_alimentar.py", title="Meu plano alimentar", url_path="plano-alimentar"),
-                    st.Page("views/mercado.py", title="Mercado inteligente", url_path="mercado"),
-                    st.Page("views/despensa.py", title="Minha despensa", url_path="despensa")],
-    "Você": [st.Page("views/evolucao.py", title="Minha evolução", url_path="evolucao"),
-             st.Page("views/personal_ia.py", title="Meu personal IA", url_path="personal-ia"),
-             st.Page("views/perfil.py", title="Meu perfil", url_path="perfil"),
-             st.Page("views/configuracoes.py", title="Configurações", url_path="configuracoes")],
-}
-st.navigation(pages, position="sidebar").run()
+page = st.navigation(pages, position="sidebar")
+ui.app_chrome(page.title, me.name, page.url_path)
+page.run()
 
 with st.sidebar:
     st.html('<p class="fx-note" style="margin-top:18px">Estimativas para planejamento pessoal. O FitOS e o Gemini '

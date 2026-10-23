@@ -1,82 +1,26 @@
-"""Linguagem visual do FitOS: editorial, sóbria, mesma família do Brasil em Dados."""
+"""Primitivos Streamlit adaptados do design React lime-powered-fit-club."""
 from __future__ import annotations
 
 import html
+import base64
+from pathlib import Path
+from contextlib import contextmanager
 from typing import Iterable
 
 import plotly.graph_objects as go
 import plotly.io as pio
 import streamlit as st
 
-# Paleta categórica validada (CVD/contraste) para a superfície escura #181b21
-SERIES = ["#2fae64", "#3a8fd8", "#b9801c", "#9a7ce0", "#e0584f"]
-INK, INK2, MUTED, GRID, AXIS, SURFACE = "#eceae5", "#c3c7cf", "#9aa1ad", "#2a2e36", "#383d47", "#181b21"
-ACCENT = "#3fbf74"
-GOOD, WARN, BAD = "#3fbf74", "#d9a75f", "#e86370"
+# Paleta categórica validada (CVD/contraste) para a superfície escura #14181E
+SERIES = ["#B5F24A", "#6eaddb", "#e4b568", "#9a7ce0", "#e0584f"]
+INK, INK2, MUTED, GRID, AXIS, SURFACE = "#F3F5F7", "#A4ADB9", "#737D8A", "#2A3039", "#383d47", "#14181E"
+ACCENT = "#B5F24A"
+GOOD, WARN, BAD = "#B5F24A", "#d9a75f", "#e86370"
 
-CSS = """
-<style>
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@700;800&display=swap");
-:root { --page:#0f1115; --surface:#181b21; --ink:#eceae5; --ink-2:#c3c7cf; --muted:#9aa1ad; --grid:#2a2e36;
-        --axis:#383d47; --border:#343943; --chip:#20242c; --acento:#3fbf74; --bad:#e86370; --warn:#d9a75f; }
-body { font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; }
-h1, h2, h3, .fx-val { font-family: "Playfair Display", Georgia, serif !important; letter-spacing: -.01em; }
-h1 { font-weight: 800 !important; }
-.block-container { padding-top: 2.2rem; max-width: 1320px; }
-[data-testid="stSidebar"] { border-right: 1px solid var(--border); }
-[data-testid="stSidebarNavSeparator"] { border-color: var(--border); }
-.fx-head { border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 18px; }
-.fx-head h1 { font-size: 34px; margin: 0 0 4px; padding: 0; line-height: 1.15; }
-.fx-head p { color: var(--ink-2); margin: 0; max-width: 85ch; font-size: 14.5px; }
-.fx-head .fx-kicker { text-transform: uppercase; letter-spacing: .08em; font-size: 11.5px; color: var(--acento); font-weight: 600; margin-bottom: 4px; }
-.fx-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; margin: 4px 0 18px; }
-.fx-tile { background: var(--surface); border: 1px solid var(--border); border-top: 3px solid var(--ink); padding: 12px 14px 10px; min-width: 0; }
-.fx-tile.acento { border-top-color: var(--acento); }
-.fx-tile .fx-rot { font-size: 12.5px; color: var(--ink-2); }
-.fx-tile .fx-val { font-size: 27px; font-weight: 800; line-height: 1.2; margin-top: 2px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.fx-tile .fx-det { font-size: 12px; color: var(--muted); margin-top: 2px; }
-.fx-tile .fx-det b { color: var(--ink-2); font-weight: 600; }
-.fx-prov { display: inline-block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--warn);
-           border: 1px solid rgba(217,167,95,.45); padding: 0 5px; margin-left: 6px; vertical-align: 2px; }
-.fx-card { background: var(--surface); border: 1px solid var(--border); border-top: 3px solid var(--ink); padding: 16px 18px; margin-bottom: 14px; }
-.fx-card h3 { font-size: 17px; margin: 0 0 6px; padding: 0; }
-.fx-card p { color: var(--ink-2); margin: 0 0 6px; }
-.fx-note { font-size: 12.5px; color: var(--muted); margin: 6px 0 14px; max-width: 95ch; }
-.fx-note a { color: var(--ink-2); }
-.fx-list { margin: 0; padding-left: 18px; color: var(--ink-2); }
-.fx-list li { margin-bottom: 5px; }
-.fx-chip { display: inline-block; background: var(--chip); padding: 1px 8px; font-size: 11.5px; margin: 0 4px 4px 0; color: var(--ink-2); }
-.fx-chip.ok { color: var(--acento); }
-.fx-chip.warn { color: var(--warn); }
-.fx-chip.bad { color: var(--bad); }
-.fx-meal { border-left: 3px solid var(--acento); padding: 2px 0 2px 12px; margin: 8px 0 4px; }
-.fx-meal b { font-size: 15px; }
-.fx-meal span { color: var(--muted); font-size: 12.5px; }
-.fx-day { font-family: "Playfair Display", Georgia, serif; font-size: 20px; font-weight: 800; margin: 12px 0 2px; }
-.fx-ex { display:flex; gap:14px; align-items:flex-start; border-top: 1px solid var(--grid); padding: 10px 0; }
-.fx-ex img { width: 96px; height: 96px; object-fit: cover; background: #fff; flex: none; }
-.fx-ex .fx-ex-t { font-weight: 600; }
-.fx-ex .fx-ex-d { color: var(--muted); font-size: 12.5px; }
-.fx-media-off { width: 96px; height: 96px; display:flex; align-items:center; justify-content:center; text-align:center;
-                font-size: 11px; color: var(--muted); border: 1px dashed var(--border); flex: none; }
-div[data-testid="stMetric"] { background: var(--surface); border: 1px solid var(--border); border-top: 3px solid var(--ink); padding: 10px 14px; }
-div[data-testid="stMetricValue"] { font-family: "Playfair Display", Georgia, serif; font-weight: 800; }
-.stTabs [data-baseweb="tab-list"] { gap: 4px; border-bottom: 1px solid var(--border); }
-.stTabs [data-baseweb="tab"] { padding: 6px 12px; }
-[data-testid="stExpander"] details { border-radius: 0; }
-button[kind="primary"] { font-weight: 600; }
-@media (max-width: 640px) {
-  .block-container { padding: 3.8rem 1rem 3rem; }
-  .fx-head h1 { font-size: 26px; }
-  .fx-tiles { grid-template-columns: 1fr 1fr; gap: 8px; }
-  .fx-tile .fx-val { font-size: 21px; }
-}
-</style>
-"""
 
 
 def inject_css() -> None:
-    st.html(CSS)
+    st.html("<style>" + (Path(__file__).resolve().parents[1] / "assets/theme.css").read_text() + "</style>")
 
 
 def esc(v) -> str:
@@ -91,15 +35,21 @@ def page_header(title: str, desc: str = "", kicker: str = "") -> None:
 
 def tiles(items: Iterable[dict]) -> None:
     """items: {label, value, detail?, foot?, provisional?, accent?} — texto já formatado."""
-    out = []
-    for it in items:
-        prov = '<span class="fx-prov">provisório</span>' if it.get("provisional") else ""
-        det = f'<div class="fx-det">{it["detail"]}</div>' if it.get("detail") else ""
-        foot = f'<div class="fx-det">{esc(it["foot"])}</div>' if it.get("foot") else ""
-        cls = "fx-tile acento" if it.get("accent") else "fx-tile"
-        out.append(f'<div class="{cls}"><div class="fx-rot">{esc(it["label"])}{prov}</div>'
-                   f'<div class="fx-val" title="{esc(it["value"])}">{esc(it["value"])}</div>{det}{foot}</div>')
-    st.html('<div class="fx-tiles">' + "".join(out) + "</div>")
+    st.html('<div class="fx-tiles">' + "".join(tile_html(it) for it in items) + "</div>")
+
+
+def tile_html(it: dict, extra: str = "") -> str:
+    prov = '<span class="fx-prov">provisório</span>' if it.get("provisional") else ""
+    det = f'<div class="fx-det">{it["detail"]}</div>' if it.get("detail") else ""
+    foot = f'<div class="fx-det fx-foot">{esc(it["foot"])}</div>' if it.get("foot") else ""
+    cls = "fx-tile acento" if it.get("accent") else "fx-tile"
+    return (f'<div class="{cls}"><div class="fx-rot">{esc(it["label"])}{prov}</div>'
+            f'<div class="fx-val" title="{esc(it["value"])}">{esc(it["value"])}</div>{det}{extra}{foot}</div>')
+
+
+def panel(name: str):
+    """Contêiner com borda no estilo de cartão do FitOS (o nome vira a classe st-key-card-<nome>)."""
+    return st.container(border=True, key=f"card-{name}")
 
 
 def card(title: str, body_html: str) -> None:
@@ -118,11 +68,11 @@ def bullet_list(items: list[str]) -> str:
     return '<ul class="fx-list">' + "".join(f"<li>{esc(i)}</li>" for i in items) + "</ul>"
 
 
-def media_html(url: str | None, alt: str) -> str:
-    if not url:
-        return '<div class="fx-media-off">sem mídia</div>'
-    return (f'<img src="{esc(url)}" alt="mídia indisponível — {esc(alt)}" loading="lazy" '
-            "onerror=\"this.outerHTML='<div class=&quot;fx-media-off&quot;>mídia indisponível</div>'\">")
+def media_html(url: str | None, alt: str, cls: str = "fx-thumb") -> str:
+    """Quadro de tamanho fixo; se a fonte externa falhar, o fundo mostra “sem demonstração”."""
+    img = f'<img src="{esc(url)}" alt="{esc(alt)}" loading="lazy">' if url else ""
+    return f'<div class="{cls}" data-vazio="sem demonstração">{img}</div>'
+
 
 
 # --------------------------------------------------------------------------- plotly
@@ -130,27 +80,34 @@ def media_html(url: str | None, alt: str) -> str:
 def _register_template() -> None:
     if "fitos" in pio.templates:
         return
+    axis = dict(gridcolor=GRID, linecolor=AXIS, zeroline=False, tickcolor=AXIS, automargin=True,
+                tickfont=dict(color=MUTED, size=11), title=dict(font=dict(color=MUTED, size=11)))
     t = go.layout.Template()
     t.layout = go.Layout(
-        font=dict(family="Inter, system-ui, sans-serif", color=INK2, size=12.5),
+        font=dict(family="Geist, system-ui, sans-serif", color=INK2, size=12),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", colorway=SERIES,
-        xaxis=dict(gridcolor=GRID, linecolor=AXIS, zeroline=False, tickcolor=AXIS, showgrid=False),
-        yaxis=dict(gridcolor=GRID, linecolor=AXIS, zeroline=False, tickcolor=AXIS),
-        legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="right", x=1, font=dict(color=INK2),
-                    bgcolor="rgba(0,0,0,0)"),
-        margin=dict(l=8, r=8, t=64, b=8), hoverlabel=dict(bgcolor=SURFACE, bordercolor=AXIS, font=dict(color=INK)),
-        hovermode="x unified", separators=",.",
+        xaxis=dict(axis, showgrid=False, showline=True, ticks="outside", ticklen=4),
+        yaxis=dict(axis, showgrid=True, showline=False, nticks=6, tickformat=",~f"),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0, font=dict(color=INK2, size=12),
+                    bgcolor="rgba(0,0,0,0)", itemsizing="constant", itemwidth=30, title=None),
+        margin=dict(l=4, r=12, t=8, b=4), hoverlabel=dict(bgcolor=SURFACE, bordercolor=AXIS, font=dict(color=INK)),
+        hovermode="x unified", separators=",.", bargap=0.42, barcornerradius=4, showlegend=True,
     )
+    t.data.scatter = [go.Scatter(line=dict(width=2), marker=dict(size=8, line=dict(width=1.5, color=SURFACE)))]
+    t.data.bar = [go.Bar(marker=dict(line=dict(width=0)))]
     pio.templates["fitos"] = t
 
 
 _register_template()
 
 
-def fig_layout(fig: go.Figure, title: str | None = None, height: int = 320) -> go.Figure:
-    fig.update_layout(template="fitos", height=height,
-                      title=dict(text=title, font=dict(size=15, color=INK), x=0, xanchor="left", y=0.98, yanchor="top")
-                      if title else None)
+def fig_layout(fig: go.Figure, title: str | None = None, height: int = 300, caption: str | None = None) -> go.Figure:
+    """O título e a legenda ficam fora da área do gráfico; o título é desenhado pelo cartão em plot()."""
+    legend = sum(1 for tr in fig.data if tr.showlegend is not False) >= 2
+    fig.update_layout(template="fitos", height=height, title=None, showlegend=legend,
+                      paper_bgcolor=SURFACE, plot_bgcolor=SURFACE,
+                      margin=dict(t=36 if legend else 8),
+                      meta={"title": title, "caption": caption})
     return fig
 
 
@@ -161,7 +118,28 @@ def date_axis(fig: go.Figure, fmt: str = "%d/%m") -> go.Figure:
 
 
 def plot(fig: go.Figure) -> None:
-    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False, "locale": "pt-BR"})
+    if not isinstance(fig.layout.meta, dict):  # gráfico montado sem fig_layout
+        fig_layout(fig)
+    meta = fig.layout.meta
+    # O cabeçalho é sempre emitido: o CSS reconhece o cartão do gráfico por ele.
+    with st.container(border=True):
+        st.html('<div class="fx-chart-head">'
+                + (f'<h3>{esc(meta["title"])}</h3>' if meta.get("title") else "")
+                + (f'<p>{esc(meta["caption"])}</p>' if meta.get("caption") else "") + "</div>")
+        st.plotly_chart(fig, width="stretch", theme=None,
+                        config={"displayModeBar": False, "locale": "pt-BR", "responsive": True})
+
+
+def day_title(title: str) -> str:
+    """“SEXTA — SUPERIORES B — COSTAS, PEITO E BRAÇOS” → “Sexta — Superiores B — Costas, peito e braços”."""
+    parts = []
+    for p in title.split(" — "):
+        words = p.lower().split()
+        if len(words) > 1 and len(words[-1]) == 1:  # letra do treino (A, B, C)
+            words[-1] = words[-1].upper()
+        text = " ".join(words)
+        parts.append(text[:1].upper() + text[1:])
+    return " — ".join(parts)
 
 
 def fmt_num(v, digits: int = 0) -> str:
@@ -173,3 +151,63 @@ def fmt_num(v, digits: int = 0) -> str:
 
 def fmt_date(d) -> str:
     return d.strftime("%d/%m/%Y") if d else "—"
+
+
+@contextmanager
+def loading(label: str, rows: int = 3):
+    """Actual operation lifetime, with cleanup on success, failure or rerun."""
+    placeholder = st.empty()
+    placeholder.html('<div class="fx-loading" role="status" aria-live="polite" aria-busy="true">'
+                     '<div class="fx-loading-line"></div><p>' + esc(label) + '</p>'
+                     + '<div class="fx-skeleton" aria-hidden="true"></div>' * rows + '</div>')
+    try:
+        yield
+    finally:
+        placeholder.empty()
+
+
+def progress_html(value: float, maximum: float, color: str = ACCENT) -> str:
+    pct = max(0, min(100, float(value) / float(maximum) * 100)) if maximum else 0
+    return (f'<div class="fx-track" role="progressbar" aria-label="Progresso" aria-valuenow="{pct:.0f}" '
+            f'aria-valuemin="0" aria-valuemax="100"><span style="width:{pct}%;background:{color}"></span></div>')
+
+
+def svg_image(svg: str) -> str:
+    # st.html intentionally strips inline SVG; an image keeps the vector intact.
+    data = base64.b64encode(svg.encode()).decode()
+    return f'<img src="data:image/svg+xml;base64,{data}" alt="" aria-hidden="true" class="fx-icon">'
+
+
+def week_strip(plan, finished_dates) -> None:
+    st.html(week_strip_html(plan, finished_dates))
+
+
+def week_strip_html(plan, finished_dates) -> str:
+    from datetime import date, timedelta
+    today = date.today()
+    monday = today - timedelta(days=today.weekday())
+    scheduled = {d.weekday for d in plan.days} if plan else set()
+    out = []
+    for n, name in enumerate(['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']):
+        day = monday + timedelta(days=n)
+        cls = 'done' if day in finished_dates else 'today' if day == today else 'planned' if n in scheduled else ''
+        label = 'Concluído' if cls == 'done' else 'Hoje' if cls == 'today' else 'Programado' if cls else 'Descanso'
+        out.append(f'<div title="{day:%d/%m}: {label}">{name}<b class="{cls}">{day.day}</b></div>')
+    return '<div class="fx-week" aria-label="Semana de treinos">' + ''.join(out) + '</div>'
+
+
+def app_chrome(title: str, name: str, path: str) -> None:
+    from datetime import date
+    st.html(f'<div class="fx-topbar"><span>FitOS &nbsp; / &nbsp; <strong>{esc(title)}</strong></span>'
+            f'<span class="fx-top-date">{date.today():%d/%m/%Y}</span>'
+            f'<a href="evolucao" target="_self">＋ Registrar peso</a><strong>{esc(name)}</strong></div>')
+    links = [('','Hoje'),('treinos','Treinos'),('plano-alimentar','Alimentar'),('despensa','Despensa'),('personal-ia','Personal IA')]
+    icons = ['<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>',
+             '<path d="m6 6 12 12M3 7l4-4M17 21l4-4M2 10l8-8M14 22l8-8"/>',
+             '<path d="M5 3v7m4-7v7m-6 0h8M7 10v11M18 3v18m0-18c-5 4-5 10 0 10"/>',
+             '<rect x="3" y="7" width="18" height="14"/><path d="M2 3h20v4H2zm7 9h6"/>',
+             '<path d="m12 3 3 6 6 3-6 3-3 6-3-6-6-3 6-3z"/>']
+    st.html('<nav class="fx-mobile-nav" aria-label="Navegação principal">' + ''.join(
+        f'<a href="/{route}" target="_self"'+(' aria-current="page"' if route == path else '')
+        + '>' + svg_image(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#A4ADB9" stroke-width="1.6">{icon}</svg>') + f'{label}</a>'
+        for (route,label),icon in zip(links,icons)) + '</nav>')

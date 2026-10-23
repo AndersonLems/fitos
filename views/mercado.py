@@ -19,7 +19,7 @@ from utils.units import UNIT_LABELS, UnitError, comparable_price, fmt_brl, fmt_q
 p = require_profile()
 ui.page_header("Mercado inteligente", "Seus preços locais, normalizados por kg, litro ou unidade. Eles alimentam o "
                "custo dos cardápios, a versão econômica e a lista de compras. Não há preços em tempo real: vale o "
-               "que você cadastrar.", kicker="Alimentação")
+               "que você cadastrar.")
 
 tabs = st.tabs(["Preços", "Comparar mercados", "Histórico de preços", "Lista de compras", "Custos do cardápio",
                 "Gastos"])
@@ -33,23 +33,24 @@ with tabs[0]:
         n_quotes = s.query(PriceQuote).count()
     prod_names = {x.id: x.name + (f" ({x.brand})" if x.brand else "") for x in products}
 
-    with st.form("cotacao", clear_on_submit=True):
-        st.markdown("**Cadastrar preço**")
-        c1, c2, c3, c4 = st.columns([3, 1.3, 1.2, 1.2])
-        pid = c1.selectbox("Produto", list(prod_names), format_func=prod_names.get, index=None,
-                           placeholder="Escolha o produto")
-        price = c2.text_input("Preço (R$)", placeholder="19,90")
-        qty = c3.text_input("Quantidade da embalagem", value="1")
-        unit = c4.selectbox("Unidade", list(UNIT_LABELS), format_func=UNIT_LABELS.get)
-        c1, c2, c3 = st.columns([2, 1, 3])
-        est = c1.selectbox("Estabelecimento", [*ests, "+ novo"], index=None, placeholder="Opcional")
-        new_est = c1.text_input("Nome do novo estabelecimento", label_visibility="collapsed",
-                                placeholder="Novo estabelecimento (se escolheu “+ novo”)")
-        qdate = c2.date_input("Data da cotação", date.today(), format="DD/MM/YYYY")
-        notes = c3.text_input("Observações", placeholder="Ex.: promoção até sexta")
-        ui.note("Pacotes: informe o conteúdo do pacote — ex.: arroz 5 kg → quantidade 5, unidade kg; "
-                "ovos em dúzia → 1 dúzia; aveia 500 g → 500 g.")
-        ok = st.form_submit_button("Salvar preço", type="primary")
+    with st.expander("Cadastrar preço", icon=":material/add:"):
+        with st.form("cotacao", clear_on_submit=True):
+            st.markdown("**Cadastrar preço**")
+            c1, c2, c3, c4 = st.columns([3, 1.3, 1.2, 1.2])
+            pid = c1.selectbox("Produto", list(prod_names), format_func=prod_names.get, index=None,
+                               placeholder="Escolha o produto")
+            price = c2.text_input("Preço (R$)", placeholder="19,90")
+            qty = c3.text_input("Quantidade da embalagem", value="1")
+            unit = c4.selectbox("Unidade", list(UNIT_LABELS), format_func=UNIT_LABELS.get)
+            c1, c2, c3 = st.columns([2, 1, 3])
+            est = c1.selectbox("Estabelecimento", [*ests, "+ novo"], index=None, placeholder="Opcional")
+            new_est = c1.text_input("Nome do novo estabelecimento", label_visibility="collapsed",
+                                    placeholder="Novo estabelecimento (se escolheu “+ novo”)")
+            qdate = c2.date_input("Data da cotação", date.today(), format="DD/MM/YYYY")
+            notes = c3.text_input("Observações", placeholder="Ex.: promoção até sexta")
+            ui.note("Pacotes: informe o conteúdo do pacote — ex.: arroz 5 kg → quantidade 5, unidade kg; "
+                    "ovos em dúzia → 1 dúzia; aveia 500 g → 500 g.")
+            ok = st.form_submit_button("Salvar preço", type="primary")
     if ok:
         try:
             if pid is None:

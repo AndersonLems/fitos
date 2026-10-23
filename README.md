@@ -18,15 +18,18 @@ e o catálogo de exercícios é baixado do ExerciseDB (~1–2 min, só uma vez; 
 - Serviço: `systemctl --user {status,restart} fitos` (porta 127.0.0.1:8501; log em `logs/streamlit.log`).
 - Túnel: `fitos.aejsolutions.com.br` → `127.0.0.1:8501`, pela regra de ingress do túnel `brasil-em-dados`
   (`~/.cloudflared/config.yml`, serviço `cloudflared-brasil-em-dados`).
-- Acesso pelo túnel exige o código `FITOS_ACCESS_CODE` do `.env` (cookie de 30 dias no navegador).
-  Não é um sistema de contas; para trocar, edite o `.env` e reinicie o serviço.
+- Entrada por perfil: cada pessoa escolhe o perfil e digita o código dele (PBKDF2 no banco; cookie
+  assinado `fitos_sessao` por 30 dias, com `FITOS_SECRET`). Cada sessão só enxerga o próprio perfil.
+- `FITOS_ACCESS_CODE` (código da instalação) é pedido para criar perfis e abre perfis antigos que ainda
+  não têm código próprio. Trocar `FITOS_SECRET` encerra todas as sessões; trocar o código de um perfil
+  encerra as sessões daquele perfil. Cinco erros seguidos bloqueiam o perfil por 5 minutos.
 
 ## Páginas
 
 | Página | O que faz |
 |---|---|
 | Painel | Peso, meta, IMC, calorias estimadas, consumo do dia, treinos da semana, custos e recomendações |
-| Meus treinos | Treino de hoje (com troca do dia), registro de séries, cronômetro, ficha, versões, progressão |
+| Meus treinos | Treino de hoje (com troca do dia), registro de séries, cronômetro, ficha, versões, progressão; “Ver execução” abre GIF, prescrição, passos e últimas cargas |
 | Biblioteca de exercícios | Busca, GIF/vídeo, instruções, erros comuns, fonte e licença |
 | Meu plano alimentar | Cardápios de 1/7/15/30/31 dias, macros e custos por refeição/dia, versão econômica, substituições |
 | Mercado inteligente | Preços por estabelecimento, comparação, histórico, lista de compras interativa, custos, gastos |
@@ -85,6 +88,8 @@ ficam salvas e só são refeitas quando você pede. O uso fica registrado em Con
   - wger: CC-BY-SA, imagens e ~80 vídeos (vários em HEVC/.MOV, que alguns navegadores não tocam).
     Importação opcional na Biblioteca.
   - ExerciseDB comercial (RapidAPI): exige chave paga — não usada.
+  - Seis exercícios principais apontavam para GIFs removidos (404); `CORE_MEDIA_FROM` copia a mídia de
+    uma entrada duplicada que funciona, sem trocar os IDs usados nas fichas.
   - WorkoutDB: domínios não responderam e não há API documentada → **não implementado**, sem simulação.
   - 62 exercícios principais têm nome em português e padrão de movimento (curadoria em
     `services/catalog_data.py`); são os usados pelos geradores e oferecidos ao Gemini.

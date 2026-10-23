@@ -3,16 +3,24 @@ from decimal import Decimal
 import streamlit as st
 
 from components import ui
-from components.state import flash, require_profile, set_profile
+from components import auth
+from components.state import flash, require_profile
+from config.settings import ACCESS_CODE
 from database.connection import session_scope
 from database.models import Profile
+from services import auth_service as auth_svc
 from services import profile_service as ps
 from services.backup_service import delete_profile
 from services.catalog_data import EQUIPMENT_CHOICES
 
 p = require_profile()
 ui.page_header("Meu perfil", "Só idade, peso e altura são obrigatórios. Cada dado opcional deixa as estimativas "
-               "e as sugestões mais adequadas; nada é presumido sem aviso.", kicker=p.name)
+               "e as sugestões mais adequadas; nada é presumido sem aviso.")
+
+initials = "".join(part[0] for part in p.name.split()[:2])
+st.html(f'<div class="fx-profile"><span>{ui.esc(initials)}</span><div><strong>{ui.esc(p.name)}</strong>'
+        f'<p>{ui.esc(ps.GOALS.get(p.goal, "Objetivo não informado"))} · '
+        f'{ui.esc(ps.EXPERIENCE.get(p.experience, "Experiência não informada"))}</p></div></div>')
 
 e = ps.estimate_energy(p)
 missing = ps.missing_for_personalization(p)
@@ -94,6 +102,35 @@ if saved:
     except ValueError as exc:
         st.error(str(exc))
 
+with st.expander("Código de acesso", expanded=p.access_hash is None):
+    if p.access_hash is None:
+        st.warning("Este perfil ainda entra com o código da instalação. Defina um código só dele.")
+    with st.form("codigo", clear_on_submit=True):
+        current = st.text_input("Código atual" if p.access_hash else "Código da instalação", type="password",
+                                disabled=p.access_hash is None and not ACCESS_CODE)
+        c1, c2 = st.columns(2)
+        new = c1.text_input("Novo código", type="password",
+                            help=f"De {auth_svc.MIN_LEN} a {auth_svc.MAX_LEN} caracteres.")
+        new2 = c2.text_input("Repita o novo código", type="password")
+        ok = st.form_submit_button("Salvar código", type="primary")
+    ui.note("Trocar o código encerra a entrada lembrada nos outros aparelhos deste perfil.")
+    if ok:
+        try:
+            if not auth_svc.can_enter(p.access_hash, current, ACCESS_CODE):
+                raise ValueError("Código atual incorreto.")
+            code = auth_svc.validate_new_code(new)
+            if code != new2.strip():
+                raise ValueError("Os dois códigos não são iguais.")
+            with session_scope() as s:
+                obj = s.get(Profile, p.id)
+                obj.access_hash = auth_svc.hash_code(code)
+                h = obj.access_hash
+            auth.refresh_cookie(p.id, h)
+            flash("Código de acesso salvo.")
+            st.rerun()
+        except ValueError as exc:
+            st.error(str(exc))
+
 with st.expander("Apagar este perfil"):
     st.write("Remove o perfil e todos os dados dele: medidas, treinos, cardápios, despensa, listas, compras e "
              "conversas. Um backup do banco é feito antes. Preços e produtos cadastrados são mantidos.")
@@ -101,5 +138,5 @@ with st.expander("Apagar este perfil"):
     if st.button("Apagar perfil definitivamente", type="secondary", disabled=confirm.strip() != p.name):
         with session_scope() as s:
             delete_profile(s, p.id)
-        set_profile(None)
+        auth.logout()
         st.rerun()

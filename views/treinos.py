@@ -6,6 +6,7 @@ import streamlit as st
 from sqlalchemy import select
 
 from components import ui
+from components.exercise_view import exercise_detail, exercise_list, prescription_text
 from components.state import flash, require_profile
 from components.timer import rest_timer
 from database.connection import session_scope
@@ -17,7 +18,7 @@ from services.profile_service import WEEKDAYS
 
 p = require_profile()
 ui.page_header("Meus treinos", "Ficha semanal, treino do dia, registro de cargas e repetições e progressão. "
-               "As sugestões de carga são conservadoras e nunca são aplicadas sozinhas.", kicker=p.name)
+               "As sugestões de carga são conservadoras e nunca são aplicadas sozinhas.")
 
 
 def ex_name(e: Exercise) -> str:
@@ -41,7 +42,7 @@ def generate_controls(key: str) -> None:
         req = st.text_input("Pedido (opcional)", key=f"rq{key}", placeholder="Ex.: mais foco em costas, sem barra livre")
         if st.button("Gerar com Gemini", key=f"gg{key}", disabled=not gs.is_configured()):
             try:
-                with st.spinner("Gerando e validando a ficha…"), session_scope() as s:
+                with ui.loading("Gerando e validando a ficha…"), session_scope() as s:
                     plan, why = ai_workout_plan(s, s.get(Profile, p.id), req)
                 flash(f"Ficha v{plan.version} criada pelo Gemini. {why}", "info")
                 st.rerun()
@@ -73,7 +74,7 @@ with tab_hoje:
     day_ids = [d.id for d in plan.days]
     titles = {d.id: d.title for d in plan.days}
 
-    head = today.day.title if today.day else "Descanso"
+    head = ui.day_title(today.day.title) if today.day else "Descanso"
     st.html(f'<div class="fx-day">{ui.esc(head)}</div>' +
             (ui.chip("trocado para hoje", "warn") if today.overridden else ui.chip(f"ficha v{plan.version}")))
 
@@ -97,8 +98,7 @@ with tab_hoje:
         st.success(f"Treino de hoje concluído ({len(done_today)} sessão registrada).")
 
     if today.day and not sess:
-        st.html(ui.bullet_list([f"{ex_name(x.exercise)} — {x.sets}×{x.reps_min}–{x.reps_max}, descanso {x.rest_seconds}s"
-                                for x in today.day.exercises]))
+        exercise_list(today.day.exercises, "treino", profile_id=p.id)
         if st.button("Iniciar outra sessão" if done_today else "Iniciar treino", type="primary"):
             with session_scope() as s:
                 pl = ws.active_plan(s, p.id)
@@ -126,11 +126,15 @@ with tab_hoje:
                 c1, c2 = st.columns([1, 5])
                 with c1:
                     st.html(ui.media_html(ex.gif_url, ex_name(ex)))
+                    with st.popover("Execução", icon=":material/play_circle:", width="stretch"):
+                        exercise_detail(ex, pe, rerun=None)  # dentro do formulário de séries
                 with c2:
-                    presc = f"{pe.sets}×{pe.reps_min}–{pe.reps_max} · descanso {pe.rest_seconds}s" if pe else "avulso"
+                    presc = prescription_text(pe) if pe else "avulso"
                     st.markdown(f"**{ex_name(ex)}** — {presc}  \nÚltima vez: {last_txt}")
                     df = pd.DataFrame([{"id": r.id, "série": r.set_number, "carga (kg)": r.load_kg, "reps": r.reps,
                                         "feita": r.completed, "dificuldade": r.difficulty} for r in rows])
+                    # tipos explícitos: colunas vazias viram célula em branco, não o texto "None"
+                    df = df.astype({"carga (kg)": "float64", "reps": "Int64", "dificuldade": "string"})
                     edited[gid] = st.data_editor(
                         df, key=f"ed{gid}", hide_index=True, width="stretch", disabled=["id", "série"],
                         column_config={"id": None,
@@ -147,7 +151,8 @@ with tab_hoje:
                             ws.save_set(s, int(r["id"]), p.id,
                                         load_kg=None if pd.isna(r["carga (kg)"]) else float(r["carga (kg)"]),
                                         reps=None if pd.isna(r["reps"]) else int(r["reps"]),
-                                        completed=bool(r["feita"]), difficulty=r["dificuldade"] or None)
+                                        completed=bool(r["feita"]),
+                                        difficulty=None if pd.isna(r["dificuldade"]) else r["dificuldade"] or None)
                 flash("Séries salvas.")
                 st.rerun()
             except ValueError as exc:
@@ -189,18 +194,17 @@ with tab_ficha:
         ui.note(ui.esc(plan.rationale))
 
     for d in plan.days:
-        st.html(f'<div class="fx-day">{ui.esc(d.title)}</div>')
-        rows = []
+        st.html(f'<div class="fx-day">{ui.esc(ui.day_title(d.title))}</div>')
+        extra = {}
         for pe in d.exercises:
             sug = last_sess[pe.id]
             kind = {"aumentar": "ok", "reduzir": "bad", "manter": ""}.get(sug.action, "")
-            rows.append(f'<div class="fx-ex">{ui.media_html(pe.exercise.gif_url, ex_name(pe.exercise))}<div>'
-                        f'<div class="fx-ex-t">{ui.esc(ex_name(pe.exercise))}</div>'
-                        f'<div class="fx-ex-d">{pe.sets} séries · {pe.reps_min}–{pe.reps_max} repetições · '
-                        f'descanso {pe.rest_seconds}s{" · " + ui.esc(pe.notes) if pe.notes else ""}</div>'
-                        f'<div class="fx-ex-d">{ui.chip(sug.text, kind) if sug.action != "sem_dados" else ""}</div>'
-                        "</div></div>")
-        st.html("".join(rows) or '<p class="fx-note">Dia sem exercícios.</p>')
+            if sug.action != "sem_dados":
+                extra[pe.id] = f'<div class="fx-ex-d">{ui.chip(sug.text, kind)}</div>'
+        if d.exercises:
+            exercise_list(d.exercises, f"ficha-{d.id}", extra=extra, profile_id=p.id)
+        else:
+            ui.note("Dia sem exercícios.")
 
         with st.expander(f"Editar {d.title.split(' — ')[0].title()}"):
             names = {ex_name(e): e.id for e in core}
@@ -316,7 +320,7 @@ with tab_hist:
     if sessions:
         st.markdown("**Sessões concluídas**")
         st.dataframe(pd.DataFrame([{"data": ui.fmt_date(r[0]), "esforço": r[1], "dor": "sim" if r[2] else "não",
-                                    "recuperação": r[3], "observações": r[4]} for r in sessions]),
+                                    "recuperação": r[3] or "—", "observações": r[4] or "—"} for r in sessions]),
                      hide_index=True, width="stretch")
 
 # ============================================================================ VERSÕES

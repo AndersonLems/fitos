@@ -5,14 +5,14 @@ import csv
 import json
 import re
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from config.settings import ASSETS_DIR, DATA_DIR, logger
 from database.models import Exercise, Food, FoodNutrients, Product
 from integrations import exercisedb
 from services.catalog_data import (
-    COMMON_ERRORS, CORE_EXERCISES, CORE_FOODS, DEFAULT_PRODUCTS, EDIBLE_SOURCE, YIELD_REFERENCE,
+    COMMON_ERRORS, CORE_EXERCISES, CORE_MEDIA_FROM, CORE_FOODS, DEFAULT_PRODUCTS, EDIBLE_SOURCE, YIELD_REFERENCE,
     YIELD_REFERENCE_SOURCE, YIELD_SOURCE,
 )
 
@@ -107,7 +107,24 @@ def apply_exercise_curation(s: Session) -> list[str]:
         e.common_errors = COMMON_ERRORS.get(slot)
     if missing:
         logger.warning("exercícios curados ausentes no catálogo: %s", missing)
+    fix_core_media(s)
     return missing
+
+
+def fix_core_media(s: Session) -> int:
+    """Copia a mídia de uma entrada duplicada para o exercício curado (ver CORE_MEDIA_FROM).
+
+    Idempotente; roda a cada abertura para corrigir bancos já criados sem mudar os IDs usados nas fichas.
+    """
+    fixed = 0
+    for name, source_id in CORE_MEDIA_FROM.items():
+        donor = s.scalar(select(Exercise).where(Exercise.source == exercisedb.SOURCE, Exercise.source_id == source_id))
+        target = s.scalar(select(Exercise).where(Exercise.source == exercisedb.SOURCE, Exercise.is_core,
+                                                 func.lower(Exercise.name_original) == name))
+        if donor and target and donor.gif_url and target.gif_url != donor.gif_url:
+            target.gif_url = donor.gif_url
+            fixed += 1
+    return fixed
 
 
 def seed_exercises(s: Session, allow_network: bool = True) -> int:
@@ -141,6 +158,7 @@ def seed_all(s: Session, allow_network: bool = True) -> dict:
     out["products"] = seed_products(s)
     try:
         out["exercises"] = seed_exercises(s, allow_network)
+        out["media_fixed"] = fix_core_media(s)
     except Exception as exc:  # catálogo externo indisponível não impede o app de abrir
         logger.warning("catálogo de exercícios não carregado: %s", exc)
         out["exercises"] = 0
