@@ -1,4 +1,4 @@
-"""Instruções de execução em português: dicionário local e tradução a pedido."""
+"""Instruções de execução em português: dicionário revisado, tradução automática e tradução a pedido."""
 import json
 
 import pytest
@@ -22,17 +22,28 @@ def test_all_core_exercises_have_portuguese_steps():
     missing = []
     for name, pt, *_ in CORE_EXERCISES:
         ex = Exercise(name_original=name, instructions=by_name[name.lower()]["instructions"])
-        steps, translated = es.instructions_pt(ex)
-        if not (translated and steps):
+        steps, origin = es.instructions_pt(ex)
+        if not (origin == "revisada" and steps):
             missing.append(pt)
     assert not missing, missing
 
 
 def test_untranslated_keeps_original_and_saved_translation_wins():
     ex = Exercise(name_original="x", instructions="Do something unusual.\nThen stop.")
-    assert es.instructions_pt(ex) == (["Do something unusual.", "Then stop."], False)
+    assert es.instructions_pt(ex) == (["Do something unusual.", "Then stop."], None)
     ex.instructions_pt = "Faça algo incomum.\nDepois pare."
-    assert es.instructions_pt(ex) == (["Faça algo incomum.", "Depois pare."], True)
+    assert es.instructions_pt(ex) == (["Faça algo incomum.", "Depois pare."], "salva")
+
+
+def test_automatic_translation_fills_the_rest_of_the_catalog():
+    auto = es._pt_sentences("automática")
+    if not auto:
+        pytest.skip("assets/exercicios_pt_auto.json não gerado")
+    first = next(iter(auto))
+    reviewed = next(iter(es._pt_sentences("revisada")))
+    ex = Exercise(name_original="x", instructions=f"{reviewed}\n{first}")
+    steps, origin = es.instructions_pt(ex)
+    assert origin == "automática" and steps[0] == es._pt_sentences("revisada")[reviewed] and steps[1] == auto[first]
 
 
 def test_translate_with_gemini_saves_and_checks_step_count(s, monkeypatch):
@@ -58,7 +69,17 @@ def test_translate_with_gemini_saves_and_checks_step_count(s, monkeypatch):
     monkeypatch.setattr(gs, "_call", fake_call)
     assert es.translate_with_gemini(s, ex.id, None) == ["Faça algo incomum.", "Depois pare."]
     assert calls == ["traducao", "traducao"]  # a primeira resposta tinha passos de menos
-    assert es.instructions_pt(ex) == (["Faça algo incomum.", "Depois pare."], True)
+    assert es.instructions_pt(ex) == (["Faça algo incomum.", "Depois pare."], "salva")
+
+
+def test_glossary_fixes_gym_terms():
+    import sys
+    sys.path.insert(0, "scripts")
+    import glossario_traducao as g
+    assert g.pre("Hold a barbell overhead") == "Hold a barra above your head"
+    assert g.post("Segure a▁campainha com seus pés", "Hold the kettlebell") == "Segure o kettlebell com os pés"
+    assert g.post("Segure a campainha", "Hold the dumbbell") == "Segure o halter"
+    assert g.post("Coloque os cabrestos no chão") == "Coloque os halteres no chão"
 
 
 def test_muscle_names_in_portuguese():

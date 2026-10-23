@@ -82,13 +82,15 @@ def exercise_detail(ex: Exercise, pe: PlannedExercise | None = None, last: list 
         if ex.common_errors:
             st.html(f'<div class="fx-facts-t">Erros comuns</div><p class="fx-body">{ui.esc(ex.common_errors)}</p>')
             ui.note("Orientação geral do FitOS por padrão de movimento.")
-    steps, translated = es.instructions_pt(ex)
+    steps, origin = es.instructions_pt(ex)
     if steps:
         st.html('<div class="fx-facts-t">Como executar</div><ol class="fx-steps">'
                 + "".join(f"<li>{ui.esc(x)}</li>" for x in steps) + "</ol>")
-        if not translated:
-            ui.note("Este exercício ainda não tem tradução; o texto acima é o original da fonte.")
-            if rerun and st.button("Traduzir com Gemini", key=f"traduzir-{ex.id}", icon=":material/translate:",
+        if origin in (None, "automática"):
+            ui.note("Tradução automática, pode ter frases estranhas." if origin else
+                    "Este exercício ainda não tem tradução; o texto acima é o original da fonte.")
+            label = "Revisar com Gemini" if origin else "Traduzir com Gemini"
+            if rerun and st.button(label, key=f"traduzir-{ex.id}", icon=":material/translate:",
                                    disabled=not gs.is_configured(), help="Uma chamada ao Gemini; a tradução fica salva."):
                 try:
                     with ui.loading("Traduzindo…"), session_scope() as s:

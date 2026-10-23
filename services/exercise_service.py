@@ -73,25 +73,30 @@ def display_name(e: Exercise) -> str:
     return e.name_pt or e.name_original
 
 
-@lru_cache(maxsize=1)
-def _pt_sentences() -> dict[str, str]:
-    """Tradução revisada, frase a frase, dos passos do ExerciseDB (cobre os exercícios principais)."""
-    return json.loads((ASSETS_DIR / "exercicios_pt.json").read_text())
+@lru_cache(maxsize=2)
+def _pt_sentences(kind: str = "revisada") -> dict[str, str]:
+    """Tradução frase a frase dos passos do ExerciseDB: "revisada" à mão (cobre os exercícios principais) ou
+    "automática" (Argos Translate + glossário, gerada por scripts/traduzir_instrucoes.py)."""
+    name = {"revisada": "exercicios_pt.json", "automática": "exercicios_pt_auto.json"}[kind]
+    path = ASSETS_DIR / name
+    return json.loads(path.read_text()) if path.exists() else {}
 
 
 def _split(text: str | None) -> list[str]:
     return [x.strip() for x in (text or "").split("\n") if x.strip()]
 
 
-def instructions_pt(e: Exercise) -> tuple[list[str], bool]:
-    """(passos, traduzido?). Ordem: tradução salva → dicionário local → texto original."""
+def instructions_pt(e: Exercise) -> tuple[list[str], str | None]:
+    """(passos, origem da tradução). Ordem: salva ("salva") → revisada → automática → original (None)."""
     if e.instructions_pt:
-        return _split(e.instructions_pt), True
+        return _split(e.instructions_pt), "salva"
     steps = _split(e.instructions)
-    table = _pt_sentences()
-    if steps and all(x in table for x in steps):
-        return [table[x] for x in steps], True
-    return steps, False
+    reviewed, auto = _pt_sentences("revisada"), _pt_sentences("automática")
+    if steps and all(x in reviewed for x in steps):
+        return [reviewed[x] for x in steps], "revisada"
+    if steps and all(x in reviewed or x in auto for x in steps):
+        return [reviewed.get(x) or auto[x] for x in steps], "automática"
+    return steps, None
 
 
 class _Steps(BaseModel):
