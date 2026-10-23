@@ -11,7 +11,7 @@ from services import gemini_service as gs
 p = require_profile()
 ui.page_header("Meu personal IA", "Converse sobre treino, cardápio, compras e preços. O assistente conhece seu perfil, "
                "a ficha, o cardápio, a despensa e os preços; quando propõe uma alteração, nada muda sem a sua "
-               "confirmação.", kicker="Gemini")
+               "confirmação.")
 
 if not gs.is_configured():
     st.warning("Configure GEMINI_API_KEY no arquivo .env para usar o chat.")

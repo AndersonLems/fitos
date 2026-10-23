@@ -13,9 +13,9 @@ from services import backup_service as bk
 from services import gemini_service as gs
 
 p = require_profile()
-ui.page_header("Configurações", "Gemini, backups, exportação e exclusão de dados.", kicker="Sistema")
+ui.page_header("Configurações", "Gemini, backups, exportação e exclusão de dados.")
 
-with st.container(border=True):
+with ui.panel("gemini"):
     st.subheader("Gemini")
     key = gemini_api_key()
     with session_scope() as s:
@@ -46,13 +46,13 @@ with st.container(border=True):
     ui.note("O FitOS só chama o Gemini quando você clica em um botão de geração ou envia mensagem no chat. "
             "Gerador local de fichas e cardápios, cálculos, custos e listas não usam IA.")
 
-with st.container(border=True):
+with ui.panel("acesso"):
     st.subheader("Acesso")
     st.markdown(("Código de acesso **ativo** (FITOS_ACCESS_CODE no `.env`)." if ACCESS_CODE else
                  "Sem código de acesso. Não exponha o app pela internet assim.")
                 + " Para trocar o código, edite o `.env` e reinicie o serviço.")
 
-with st.container(border=True):
+with ui.panel("backup"):
     st.subheader("Backup")
     c1, c2 = st.columns([1, 3])
     if c1.button("Fazer backup agora", type="primary"):
@@ -68,7 +68,7 @@ with st.container(border=True):
         st.download_button("Baixar arquivo .db", b.read_bytes(), file_name=b.name, mime="application/x-sqlite3")
         ui.note("Para restaurar: pare o serviço, substitua <code>data/fitos.db</code> pelo arquivo do backup e reinicie.")
 
-with st.container(border=True):
+with ui.panel("exportar"):
     st.subheader("Exportar dados")
     c1, c2, c3 = st.columns(3)
     scope = c1.radio("Escopo", ["Este perfil", "Instalação inteira"])
@@ -77,7 +77,7 @@ with st.container(border=True):
     c3.download_button("Baixar exportação (.zip)", data, file_name=f"fitos-{fmt}-{datetime.now():%Y%m%d}.zip",
                        mime="application/zip")
 
-with st.container(border=True):
+with ui.panel("apagar"):
     st.subheader("Apagar dados deste perfil")
     SECTIONS = {"measurements": "Medidas e pesagens", "workout_sessions": "Sessões e séries de treino",
                 "workout_plans": "Fichas de treino (todas as versões)", "meal_plans": "Cardápios",
@@ -93,7 +93,7 @@ with st.container(border=True):
         st.rerun()
     ui.note("Para apagar o perfil inteiro, use Meu perfil → Apagar este perfil.")
 
-with st.container(border=True):
+with ui.panel("fontes"):
     st.subheader("Fontes e limitações")
     st.html(ui.bullet_list([
         "Composição dos alimentos: TACO 4ª ed. (NEPA/UNICAMP, 2011), via conjunto normalizado do projeto taco-api.",

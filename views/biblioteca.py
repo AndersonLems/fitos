@@ -7,7 +7,7 @@ from services import exercise_service as es
 from services.catalog_data import SLOT_LABELS
 
 ui.page_header("Biblioteca de exercícios", "Catálogo local com demonstrações do ExerciseDB e do wger. As mídias são "
-               "exibidas a partir das fontes originais, com atribuição; não há cópia local.", kicker="Treino")
+               "exibidas a partir das fontes originais, com atribuição; não há cópia local.")
 
 with session_scope() as s:
     body_parts = es.distinct_values(s, Exercise.body_part)
@@ -32,16 +32,18 @@ else:
     if sel not in ids:
         sel = ids[0]
     left, right = st.columns([2, 3])
-    with left:
-        grid = st.columns(2)
-        for i, exercise in enumerate(results):
-            with grid[i % 2], st.container(border=True):
-                st.html(ui.media_html(exercise.gif_url, es.display_name(exercise)))
-                if st.button(es.display_name(exercise), key=f"library_{exercise.id}", width="stretch",
-                             type="primary" if sel == exercise.id else "secondary"):
-                    st.session_state["ex_sel"] = exercise.id
-                    st.rerun()
-                st.caption(es.BODY_PARTS_PT.get(exercise.body_part, exercise.body_part) or "Exercício")
+    with left, st.container(key="library-grid"):
+        # Linhas de dois cartões: cada linha estica os dois cartões até a mesma altura.
+        for start in range(0, len(results), 2):
+            row = st.columns(2)
+            for col, exercise in zip(row, results[start:start + 2]):
+                with col, ui.panel(f"lib-{exercise.id}"):
+                    st.html(ui.media_html(exercise.gif_url, es.display_name(exercise)))
+                    st.caption(es.BODY_PARTS_PT.get(exercise.body_part, exercise.body_part) or "Exercício")
+                    if st.button(es.display_name(exercise), key=f"library_{exercise.id}", width="stretch",
+                                 type="primary" if sel == exercise.id else "secondary"):
+                        st.session_state["ex_sel"] = exercise.id
+                        st.rerun()
     ex = next(e for e in results if e.id == sel)
     with right:
         st.html(f'<div class="fx-day">{ui.esc(es.display_name(ex))}</div>'
@@ -53,8 +55,7 @@ else:
             st.video(ex.video_url)
             ui.note("Vídeos do wger podem estar em HEVC (.MOV), que alguns navegadores não reproduzem.")
         if ex.gif_url:
-            st.html(f'<img src="{ui.esc(ex.gif_url)}" alt="Demonstração de {ui.esc(es.display_name(ex))} — '
-                    f'mídia indisponível" style="max-width:360px;width:100%;background:#fff">')
+            st.html(ui.media_html(ex.gif_url, f"Demonstração de {es.display_name(ex)}", "fx-thumb fx-demo"))
         if not ex.gif_url and not ex.video_url:
             st.warning("Sem mídia de demonstração para este exercício.")
         if ex.secondary_muscles:

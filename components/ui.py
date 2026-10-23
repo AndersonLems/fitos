@@ -35,15 +35,21 @@ def page_header(title: str, desc: str = "", kicker: str = "") -> None:
 
 def tiles(items: Iterable[dict]) -> None:
     """items: {label, value, detail?, foot?, provisional?, accent?} — texto já formatado."""
-    out = []
-    for it in items:
-        prov = '<span class="fx-prov">provisório</span>' if it.get("provisional") else ""
-        det = f'<div class="fx-det">{it["detail"]}</div>' if it.get("detail") else ""
-        foot = f'<div class="fx-det">{esc(it["foot"])}</div>' if it.get("foot") else ""
-        cls = "fx-tile acento" if it.get("accent") else "fx-tile"
-        out.append(f'<div class="{cls}"><div class="fx-rot">{esc(it["label"])}{prov}</div>'
-                   f'<div class="fx-val" title="{esc(it["value"])}">{esc(it["value"])}</div>{det}{foot}</div>')
-    st.html('<div class="fx-tiles">' + "".join(out) + "</div>")
+    st.html('<div class="fx-tiles">' + "".join(tile_html(it) for it in items) + "</div>")
+
+
+def tile_html(it: dict, extra: str = "") -> str:
+    prov = '<span class="fx-prov">provisório</span>' if it.get("provisional") else ""
+    det = f'<div class="fx-det">{it["detail"]}</div>' if it.get("detail") else ""
+    foot = f'<div class="fx-det fx-foot">{esc(it["foot"])}</div>' if it.get("foot") else ""
+    cls = "fx-tile acento" if it.get("accent") else "fx-tile"
+    return (f'<div class="{cls}"><div class="fx-rot">{esc(it["label"])}{prov}</div>'
+            f'<div class="fx-val" title="{esc(it["value"])}">{esc(it["value"])}</div>{det}{extra}{foot}</div>')
+
+
+def panel(name: str):
+    """Contêiner com borda no estilo de cartão do FitOS (o nome vira a classe st-key-card-<nome>)."""
+    return st.container(border=True, key=f"card-{name}")
 
 
 def card(title: str, body_html: str) -> None:
@@ -62,11 +68,11 @@ def bullet_list(items: list[str]) -> str:
     return '<ul class="fx-list">' + "".join(f"<li>{esc(i)}</li>" for i in items) + "</ul>"
 
 
-def media_html(url: str | None, alt: str) -> str:
-    if not url:
-        return '<div class="fx-media-off" aria-label="Sem mídia">◇</div>'
-    return (f'<img src="{esc(url)}" alt="mídia indisponível — {esc(alt)}" loading="lazy" '
-            "onerror=\"this.outerHTML='<div class=&quot;fx-media-off&quot;>mídia indisponível</div>'\">")
+def media_html(url: str | None, alt: str, cls: str = "fx-thumb") -> str:
+    """Quadro de tamanho fixo; se a fonte externa falhar, o fundo mostra “sem demonstração”."""
+    img = f'<img src="{esc(url)}" alt="{esc(alt)}" loading="lazy">' if url else ""
+    return f'<div class="{cls}" data-vazio="sem demonstração">{img}</div>'
+
 
 
 # --------------------------------------------------------------------------- plotly
@@ -74,27 +80,34 @@ def media_html(url: str | None, alt: str) -> str:
 def _register_template() -> None:
     if "fitos" in pio.templates:
         return
+    axis = dict(gridcolor=GRID, linecolor=AXIS, zeroline=False, tickcolor=AXIS, automargin=True,
+                tickfont=dict(color=MUTED, size=11), title=dict(font=dict(color=MUTED, size=11)))
     t = go.layout.Template()
     t.layout = go.Layout(
-        font=dict(family="Geist, system-ui, sans-serif", color=INK2, size=12.5),
+        font=dict(family="Geist, system-ui, sans-serif", color=INK2, size=12),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", colorway=SERIES,
-        xaxis=dict(gridcolor=GRID, linecolor=AXIS, zeroline=False, tickcolor=AXIS, showgrid=False),
-        yaxis=dict(gridcolor=GRID, linecolor=AXIS, zeroline=False, tickcolor=AXIS),
-        legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="right", x=1, font=dict(color=INK2),
-                    bgcolor="rgba(0,0,0,0)"),
-        margin=dict(l=8, r=8, t=64, b=8), hoverlabel=dict(bgcolor=SURFACE, bordercolor=AXIS, font=dict(color=INK)),
-        hovermode="x unified", separators=",.",
+        xaxis=dict(axis, showgrid=False, showline=True, ticks="outside", ticklen=4),
+        yaxis=dict(axis, showgrid=True, showline=False, nticks=6, tickformat=",~f"),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0, font=dict(color=INK2, size=12),
+                    bgcolor="rgba(0,0,0,0)", itemsizing="constant", itemwidth=30, title=None),
+        margin=dict(l=4, r=12, t=8, b=4), hoverlabel=dict(bgcolor=SURFACE, bordercolor=AXIS, font=dict(color=INK)),
+        hovermode="x unified", separators=",.", bargap=0.42, barcornerradius=4, showlegend=True,
     )
+    t.data.scatter = [go.Scatter(line=dict(width=2), marker=dict(size=8, line=dict(width=1.5, color=SURFACE)))]
+    t.data.bar = [go.Bar(marker=dict(line=dict(width=0)))]
     pio.templates["fitos"] = t
 
 
 _register_template()
 
 
-def fig_layout(fig: go.Figure, title: str | None = None, height: int = 320) -> go.Figure:
-    fig.update_layout(template="fitos", height=height,
-                      title=dict(text=title, font=dict(size=15, color=INK), x=0, xanchor="left", y=0.98, yanchor="top")
-                      if title else None)
+def fig_layout(fig: go.Figure, title: str | None = None, height: int = 300, caption: str | None = None) -> go.Figure:
+    """O título e a legenda ficam fora da área do gráfico; o título é desenhado pelo cartão em plot()."""
+    legend = sum(1 for tr in fig.data if tr.showlegend is not False) >= 2
+    fig.update_layout(template="fitos", height=height, title=None, showlegend=legend,
+                      paper_bgcolor=SURFACE, plot_bgcolor=SURFACE,
+                      margin=dict(t=36 if legend else 8),
+                      meta={"title": title, "caption": caption})
     return fig
 
 
@@ -105,7 +118,28 @@ def date_axis(fig: go.Figure, fmt: str = "%d/%m") -> go.Figure:
 
 
 def plot(fig: go.Figure) -> None:
-    st.plotly_chart(fig, width="stretch", theme=None, config={"displayModeBar": False, "locale": "pt-BR"})
+    if not isinstance(fig.layout.meta, dict):  # gráfico montado sem fig_layout
+        fig_layout(fig)
+    meta = fig.layout.meta
+    # O cabeçalho é sempre emitido: o CSS reconhece o cartão do gráfico por ele.
+    with st.container(border=True):
+        st.html('<div class="fx-chart-head">'
+                + (f'<h3>{esc(meta["title"])}</h3>' if meta.get("title") else "")
+                + (f'<p>{esc(meta["caption"])}</p>' if meta.get("caption") else "") + "</div>")
+        st.plotly_chart(fig, width="stretch", theme=None,
+                        config={"displayModeBar": False, "locale": "pt-BR", "responsive": True})
+
+
+def day_title(title: str) -> str:
+    """“SEXTA — SUPERIORES B — COSTAS, PEITO E BRAÇOS” → “Sexta — Superiores B — Costas, peito e braços”."""
+    parts = []
+    for p in title.split(" — "):
+        words = p.lower().split()
+        if len(words) > 1 and len(words[-1]) == 1:  # letra do treino (A, B, C)
+            words[-1] = words[-1].upper()
+        text = " ".join(words)
+        parts.append(text[:1].upper() + text[1:])
+    return " — ".join(parts)
 
 
 def fmt_num(v, digits: int = 0) -> str:
@@ -165,6 +199,10 @@ def exercise_rows(exercises, completed: dict | None = None) -> None:
 
 
 def week_strip(plan, finished_dates) -> None:
+    st.html(week_strip_html(plan, finished_dates))
+
+
+def week_strip_html(plan, finished_dates) -> str:
     from datetime import date, timedelta
     today = date.today()
     monday = today - timedelta(days=today.weekday())
@@ -175,7 +213,7 @@ def week_strip(plan, finished_dates) -> None:
         cls = 'done' if day in finished_dates else 'today' if day == today else 'planned' if n in scheduled else ''
         label = 'Concluído' if cls == 'done' else 'Hoje' if cls == 'today' else 'Programado' if cls else 'Descanso'
         out.append(f'<div title="{day:%d/%m}: {label}">{name}<b class="{cls}">{day.day}</b></div>')
-    st.html('<div class="fx-week" aria-label="Semana de treinos">' + ''.join(out) + '</div>')
+    return '<div class="fx-week" aria-label="Semana de treinos">' + ''.join(out) + '</div>'
 
 
 def app_chrome(title: str, name: str, profile_id: int, path: str) -> None:

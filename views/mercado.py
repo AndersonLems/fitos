@@ -19,7 +19,7 @@ from utils.units import UNIT_LABELS, UnitError, comparable_price, fmt_brl, fmt_q
 p = require_profile()
 ui.page_header("Mercado inteligente", "Seus preços locais, normalizados por kg, litro ou unidade. Eles alimentam o "
                "custo dos cardápios, a versão econômica e a lista de compras. Não há preços em tempo real: vale o "
-               "que você cadastrar.", kicker="Alimentação")
+               "que você cadastrar.")
 
 tabs = st.tabs(["Preços", "Comparar mercados", "Histórico de preços", "Lista de compras", "Custos do cardápio",
                 "Gastos"])

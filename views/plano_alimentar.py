@@ -19,7 +19,7 @@ from utils.units import fmt_brl
 p = require_profile()
 ui.page_header("Meu plano alimentar", "Cardápios de 1 a 31 dias. As refeições podem ser propostas pelo gerador local "
                "ou pelo Gemini; calorias, macronutrientes e custos são sempre calculados pelo FitOS com a TACO e os "
-               "seus preços.", kicker=p.name)
+               "seus preços.")
 e = ps.estimate_energy(p)
 
 
@@ -102,11 +102,22 @@ with tab_dia:
     st.html(ui.chip(f"{dm.kcal:.0f} kcal") + ui.chip(f"P {dm.protein:.0f} g") + ui.chip(f"C {dm.carbs:.0f} g")
             + ui.chip(f"G {dm.fat:.0f} g") + ui.chip(f"custo {fmt_brl(sm.day_cost[day])}"))
     for ms in sm.days[day]:
-        with st.container(border=True):
-            meal = ms.meal
-            st.html(f'<div class="fx-meal"><b>{ui.esc(meal.meal_type)}</b> <span>· {ui.esc(meal.title or "")} · '
-                    f'{ms.macros.kcal:.0f} kcal · P {ms.macros.protein:.0f} g · {fmt_brl(ms.cost)}'
-                    f'{" (parcial)" if ms.unpriced else ""}</span></div>')
+        meal = ms.meal
+        with ui.panel(f"meal-{meal.id}"):
+            c1, c2 = st.columns([5, 1], vertical_alignment="center")
+            c1.html(f'<div class="fx-meal-head"><h3>{ui.esc(meal.meal_type)}</h3><p>{ui.esc(meal.title or "")}</p>'
+                    f'<p>{ms.macros.kcal:.0f} kcal · P {ms.macros.protein:.0f} g · {fmt_brl(ms.cost)}'
+                    f'{" (parcial)" if ms.unpriced else ""}</p></div>')
+            with c2:
+                if meal.id in eaten:
+                    if st.button("Desmarcar", key=f"un{meal.id}", width="stretch"):
+                        with session_scope() as s:
+                            ns.unlog_meal(s, p.id, meal.id)
+                        st.rerun()
+                elif st.button("Comi hoje", key=f"eat{meal.id}", width="stretch"):
+                    with session_scope() as s:
+                        ns.log_meal(s, p.id, s.get(Meal, meal.id))
+                    st.rerun()
             rows = []
             for it in meal.items:
                 m = ns.food_macros(it.food, it.grams)
@@ -116,19 +127,10 @@ with tab_dia:
                              "carbo": round(m.carbs, 1), "gordura": round(m.fat, 1),
                              "comprar (cru)": f"{ic.purchase_grams:.0f} g" + (" ×pessoas" if plan.people > 1 else ""),
                              "custo": fmt_brl(ic.cost) if ic.cost is not None else "sem preço"})
-            st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
-            c1, c2 = st.columns([4, 1])
+            st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch", column_config={
+                k: st.column_config.NumberColumn(k, format="localized") for k in ("kcal", "proteína", "carbo", "gordura")})
             if meal.preparation:
-                c1.caption("Preparo: " + meal.preparation)
-            if meal.id in eaten:
-                if c2.button("Desmarcar", key=f"un{meal.id}"):
-                    with session_scope() as s:
-                        ns.unlog_meal(s, p.id, meal.id)
-                    st.rerun()
-            elif c2.button("Comi hoje", key=f"eat{meal.id}"):
-                with session_scope() as s:
-                    ns.log_meal(s, p.id, s.get(Meal, meal.id))
-                st.rerun()
+                st.caption("Preparo: " + meal.preparation)
     ui.note("Valores nutricionais: TACO 4ª ed. (NEPA/UNICAMP). Conversão cru/cozido por índice de cocção de referência "
             "e perdas por fator de correção — estimativas editáveis. Planejamento pessoal, não prescrição clínica.")
 

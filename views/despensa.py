@@ -20,7 +20,7 @@ from utils.units import UNIT_LABELS, UnitError, fmt_brl, fmt_qty
 
 p = require_profile()
 ui.page_header("Minha despensa", "O que já existe em casa. A lista de compras desconta este estoque (itens vencidos "
-               "não contam) e a cozinha sugere o que dá para preparar com ele.", kicker=p.name)
+               "não contam) e a cozinha sugere o que dá para preparar com ele.")
 e = ps.estimate_energy(p)
 
 tab_est, tab_coz = st.tabs(["Estoque", "O que posso preparar hoje?"])
@@ -213,7 +213,7 @@ with tab_coz:
     by = {f.id: f for f in core}
     for k, r in enumerate(st.session_state.get("receitas", [])):
         mac = sum((ns.food_macros(by[i["food_id"]], i["grams"]) for i in r["items"] if i["food_id"] in by), ns.Macros())
-        with st.container(border=True):
+        with ui.panel(f"receita-{k}"):
             st.markdown(f"**{r['name']}** · {r['prep_minutes']} min · {mac.kcal:.0f} kcal · P {mac.protein:.0f} g")
             st.html(ui.bullet_list([f"{i['grams']:g} g de {by[i['food_id']].short_name}" for i in r["items"]
                                     if i["food_id"] in by]))

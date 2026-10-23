@@ -17,7 +17,7 @@ from services.profile_service import WEEKDAYS
 
 p = require_profile()
 ui.page_header("Meus treinos", "Ficha semanal, treino do dia, registro de cargas e repetições e progressão. "
-               "As sugestões de carga são conservadoras e nunca são aplicadas sozinhas.", kicker=p.name)
+               "As sugestões de carga são conservadoras e nunca são aplicadas sozinhas.")
 
 
 def ex_name(e: Exercise) -> str:
@@ -73,7 +73,7 @@ with tab_hoje:
     day_ids = [d.id for d in plan.days]
     titles = {d.id: d.title for d in plan.days}
 
-    head = today.day.title if today.day else "Descanso"
+    head = ui.day_title(today.day.title) if today.day else "Descanso"
     st.html(f'<div class="fx-day">{ui.esc(head)}</div>' +
             (ui.chip("trocado para hoje", "warn") if today.overridden else ui.chip(f"ficha v{plan.version}")))
 
@@ -188,12 +188,13 @@ with tab_ficha:
         ui.note(ui.esc(plan.rationale))
 
     for d in plan.days:
-        st.html(f'<div class="fx-day">{ui.esc(d.title)}</div>')
+        st.html(f'<div class="fx-day">{ui.esc(ui.day_title(d.title))}</div>')
         rows = []
         for pe in d.exercises:
             sug = last_sess[pe.id]
             kind = {"aumentar": "ok", "reduzir": "bad", "manter": ""}.get(sug.action, "")
-            rows.append(f'<div class="fx-ex">{ui.media_html(pe.exercise.gif_url, ex_name(pe.exercise))}<div>'
+            rows.append(f'<div class="fx-ex fx-ex-ficha">'
+                        f'{ui.media_html(pe.exercise.gif_url, ex_name(pe.exercise), "fx-thumb fx-thumb-sm")}<div>'
                         f'<div class="fx-ex-t">{ui.esc(ex_name(pe.exercise))}</div>'
                         f'<div class="fx-ex-d">{pe.sets} séries · {pe.reps_min}–{pe.reps_max} repetições · '
                         f'descanso {pe.rest_seconds}s{" · " + ui.esc(pe.notes) if pe.notes else ""}</div>'
@@ -315,7 +316,7 @@ with tab_hist:
     if sessions:
         st.markdown("**Sessões concluídas**")
         st.dataframe(pd.DataFrame([{"data": ui.fmt_date(r[0]), "esforço": r[1], "dor": "sim" if r[2] else "não",
-                                    "recuperação": r[3], "observações": r[4]} for r in sessions]),
+                                    "recuperação": r[3] or "—", "observações": r[4] or "—"} for r in sessions]),
                      hide_index=True, width="stretch")
 
 # ============================================================================ VERSÕES

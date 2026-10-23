@@ -12,7 +12,7 @@ from services.catalog_data import EQUIPMENT_CHOICES
 
 p = require_profile()
 ui.page_header("Meu perfil", "Só idade, peso e altura são obrigatórios. Cada dado opcional deixa as estimativas "
-               "e as sugestões mais adequadas; nada é presumido sem aviso.", kicker=p.name)
+               "e as sugestões mais adequadas; nada é presumido sem aviso.")
 
 initials = "".join(part[0] for part in p.name.split()[:2])
 st.html(f'<div class="fx-profile"><span>{ui.esc(initials)}</span><div><strong>{ui.esc(p.name)}</strong>'
