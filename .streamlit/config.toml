@@ -5,6 +5,8 @@ headless = true
 enableXsrfProtection = true
 enableCORS = true
 maxUploadSize = 10
+# O túnel tem upload de ~5 Mbps: comprimir o websocket reduz gráficos e tabelas enviados a cada interação.
+enableWebsocketCompression = true
 runOnSave = false
 
 [browser]
