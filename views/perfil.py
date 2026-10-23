@@ -1,0 +1,105 @@
+from decimal import Decimal
+
+import streamlit as st
+
+from components import ui
+from components.state import flash, require_profile, set_profile
+from database.connection import session_scope
+from database.models import Profile
+from services import profile_service as ps
+from services.backup_service import delete_profile
+from services.catalog_data import EQUIPMENT_CHOICES
+
+p = require_profile()
+ui.page_header("Meu perfil", "Só idade, peso e altura são obrigatórios. Cada dado opcional deixa as estimativas "
+               "e as sugestões mais adequadas; nada é presumido sem aviso.", kicker=p.name)
+
+e = ps.estimate_energy(p)
+missing = ps.missing_for_personalization(p)
+ui.tiles([
+    {"label": "Gasto basal estimado", "value": f"{ui.fmt_num(e.bmr)} kcal", "provisional": p.sex not in ("M", "F")},
+    {"label": "Gasto diário estimado", "value": f"{ui.fmt_num(e.tdee)} kcal", "provisional": not p.activity_level},
+    {"label": "Meta para o objetivo", "value": f"{ui.fmt_num(e.target_kcal)} kcal", "provisional": e.is_provisional,
+     "detail": f"faixa {e.range_kcal[0]}–{e.range_kcal[1]} kcal sem o dado de sexo" if e.range_kcal else ""},
+    {"label": "Proteína / gordura / carboidrato", "value": f"{e.protein_g} / {e.fat_g} / {e.carbs_g} g"},
+])
+if missing:
+    ui.note("Para personalizar melhor, informe: " + ", ".join(missing) + ".")
+for n in e.notes:
+    ui.note(n)
+
+opt = lambda d: [None, *d]  # noqa: E731
+with st.form("perfil"):
+    st.subheader("Dados básicos")
+    c1, c2, c3, c4 = st.columns(4)
+    name = c1.text_input("Nome", p.name)
+    age = c2.number_input("Idade", 12, 100, p.age)
+    weight = c3.number_input("Peso atual (kg)", 30.0, 300.0, float(p.weight_kg), 0.1, format="%.1f",
+                             help="Alterar aqui também registra uma pesagem de hoje.")
+    height = c4.number_input("Altura (cm)", 120.0, 230.0, float(p.height_cm), 0.5, format="%.1f")
+
+    st.subheader("Objetivo e rotina")
+    c1, c2, c3 = st.columns(3)
+    sex = c1.selectbox("Sexo para estimativas fisiológicas", opt(["F", "M"]), index=opt(["F", "M"]).index(p.sex),
+                       format_func=lambda v: {"F": "Feminino", "M": "Masculino", None: "Não informar"}[v])
+    goal = c2.selectbox("Objetivo", opt(list(ps.GOALS)), index=opt(list(ps.GOALS)).index(p.goal),
+                        format_func=lambda v: ps.GOALS.get(v, "Não informado"))
+    target = c3.number_input("Meta de peso (kg)", 30.0, 300.0, p.target_weight_kg, 0.5, format="%.1f")
+    c1, c2, c3 = st.columns(3)
+    act = c1.selectbox("Nível de atividade", opt(list(ps.ACTIVITY)), index=opt(list(ps.ACTIVITY)).index(p.activity_level),
+                       format_func=lambda v: ps.ACTIVITY[v][1] if v else "Não informado")
+    exp = c2.selectbox("Experiência de treino", opt(list(ps.EXPERIENCE)), index=opt(list(ps.EXPERIENCE)).index(p.experience),
+                       format_func=lambda v: ps.EXPERIENCE.get(v, "Não informada"))
+    minutes = c3.number_input("Tempo por treino (min)", 20, 180, p.session_minutes, 5)
+    days = st.multiselect("Dias disponíveis para academia", list(range(7)), p.training_weekdays or [],
+                          format_func=lambda i: ps.WEEKDAYS[i])
+    equipment = st.multiselect("Equipamentos disponíveis", EQUIPMENT_CHOICES,
+                               [x for x in (p.equipment or []) if x in EQUIPMENT_CHOICES])
+    injuries = st.text_area("Lesões ou limitações físicas", p.injuries or "",
+                            placeholder="Ex.: dor no joelho direito ao agachar fundo")
+
+    st.subheader("Alimentação")
+    c1, c2 = st.columns(2)
+    restrictions = c1.text_area("Restrições alimentares", p.restrictions or "", placeholder="Ex.: sem lactose, vegetariano")
+    allergies = c2.text_area("Alergias", p.allergies or "", placeholder="Ex.: amendoim")
+    prefs = st.text_area("Preferências", p.preferences or "",
+                         placeholder="Ex.: prefiro refeições rápidas; não como beterraba")
+    c1, c2 = st.columns(2)
+    budget = c1.number_input("Orçamento mensal para alimentação (R$)", 0.0, 100000.0,
+                             float(p.monthly_food_budget) if p.monthly_food_budget else None, 10.0, format="%.2f")
+    people = c2.number_input("Pessoas no planejamento alimentar", 1, 12, p.people_count or 1)
+    ui.note("Restrições, alergias e preferências são aplicadas por palavras-chave aos cardápios gerados "
+            "(ex.: “lactose”, “vegetariano”, “glúten”, “amendoim”, nome de um alimento). Confira sempre o resultado.")
+    saved = st.form_submit_button("Salvar perfil", type="primary")
+
+if saved:
+    try:
+        ps.validate_basics(age, weight, height)
+        with session_scope() as s:
+            obj = s.get(Profile, p.id)
+            if abs(weight - obj.weight_kg) >= 0.05:
+                ps.record_weight(s, p.id, weight, notes="Atualizado no perfil")
+            obj.name = (name or obj.name).strip()[:80]
+            obj.age, obj.weight_kg, obj.height_cm = int(age), float(weight), float(height)
+            obj.sex, obj.goal, obj.target_weight_kg = sex, goal, target
+            obj.activity_level, obj.experience, obj.session_minutes = act, exp, minutes
+            obj.training_weekdays = sorted(days) or None
+            obj.equipment = equipment or None
+            obj.injuries, obj.restrictions = injuries.strip() or None, restrictions.strip() or None
+            obj.allergies, obj.preferences = allergies.strip() or None, prefs.strip() or None
+            obj.monthly_food_budget = Decimal(str(round(budget, 2))) if budget else None
+            obj.people_count = int(people)
+        flash("Perfil salvo.")
+        st.rerun()
+    except ValueError as exc:
+        st.error(str(exc))
+
+with st.expander("Apagar este perfil"):
+    st.write("Remove o perfil e todos os dados dele: medidas, treinos, cardápios, despensa, listas, compras e "
+             "conversas. Um backup do banco é feito antes. Preços e produtos cadastrados são mantidos.")
+    confirm = st.text_input(f"Digite o nome do perfil ({p.name}) para confirmar")
+    if st.button("Apagar perfil definitivamente", type="secondary", disabled=confirm.strip() != p.name):
+        with session_scope() as s:
+            delete_profile(s, p.id)
+        set_profile(None)
+        st.rerun()

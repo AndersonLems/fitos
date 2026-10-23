@@ -1,0 +1,35 @@
+[server]
+address = "127.0.0.1"
+port = 8501
+headless = true
+enableXsrfProtection = true
+enableCORS = true
+maxUploadSize = 10
+runOnSave = false
+
+[browser]
+gatherUsageStats = false
+
+[client]
+toolbarMode = "minimal"
+showErrorDetails = "none"
+showSidebarNavigation = true
+
+[runner]
+magicEnabled = false
+
+[theme]
+base = "dark"
+primaryColor = "#3fbf74"
+backgroundColor = "#0f1115"
+secondaryBackgroundColor = "#181b21"
+textColor = "#eceae5"
+borderColor = "#343943"
+showWidgetBorder = true
+baseRadius = "small"
+font = "Inter, system-ui, -apple-system, 'Segoe UI', sans-serif"
+headingFont = "'Playfair Display', Georgia, serif"
+codeFont = "'JetBrains Mono', ui-monospace, monospace"
+
+[theme.sidebar]
+backgroundColor = "#13161b"
